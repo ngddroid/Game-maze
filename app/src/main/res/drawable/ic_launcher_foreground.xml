@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splashy Glide launcher foreground: glossy striped ball leaving a mint-to-lemon paint swoosh. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.76" android:scaleY="0.76" android:pivotX="54" android:pivotY="54" android:translateX="-1">
+        <path android:strokeColor="#29000000" android:strokeWidth="18" android:strokeLineCap="round"
+            android:pathData="M25,81C31,61 45,61 59,55" />
+        <path android:strokeWidth="18" android:strokeLineCap="round" android:pathData="M24,78C30,58 44,58 58,52">
+            <aapt:attr name="android:strokeColor">
+                <gradient android:type="linear" android:startX="24" android:startY="78" android:endX="58" android:endY="52">
+                    <item android:offset="0" android:color="#FF2EDB9B" />
+                    <item android:offset="1" android:color="#FFFFD93D" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:strokeColor="#5FFFFFFF" android:strokeWidth="4" android:strokeLineCap="round"
+            android:pathData="M27,70C32,60 42,57 52,53.5" />
+        <path android:fillColor="#323A1F5C" android:pathData="M50,65.5a15,4.5 0 1,0 30,0a15,4.5 0 1,0 -30,0z" />
+        <path android:pathData="M45,48a17,17 0 1,0 34,0a17,17 0 1,0 -34,0z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="56" android:centerY="41" android:gradientRadius="30">
+                    <item android:offset="0" android:color="#FFFFFFFF" />
+                    <item android:offset="0.45" android:color="#FFFFE6F2" />
+                    <item android:offset="1" android:color="#FFE2A9CB" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <group android:rotation="-18" android:pivotX="62" android:pivotY="48">
+            <clip-path android:pathData="M45,48a17,17 0 1,0 34,0a17,17 0 1,0 -34,0z" />
+            <path android:pathData="M40,43.5h44v9.5h-44z">
+                <aapt:attr name="android:fillColor">
+                    <gradient android:type="linear" android:startX="0" android:startY="44" android:endX="0" android:endY="54">
+                        <item android:offset="0" android:color="#FFFF6FB5" />
+                        <item android:offset="1" android:color="#FFE0347F" />
+                    </gradient>
+                </aapt:attr>
+            </path>
+        </group>
+        <path android:pathData="M45,48a17,17 0 1,0 34,0a17,17 0 1,0 -34,0z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="radial" android:centerX="56" android:centerY="40" android:gradientRadius="34">
+                    <item android:offset="0.55" android:color="#005B2A6E" />
+                    <item android:offset="1" android:color="#465B2A6E" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <group android:rotation="-30" android:pivotX="55" android:pivotY="39">
+            <path android:fillColor="#EBFFFFFF" android:pathData="M50,39a5,3 0 1,0 10,0a5,3 0 1,0 -10,0z" />
+        </group>
+        <path android:fillColor="#FFFFFFFF" android:pathData="M84,25Q84,30 89,30Q84,30 84,35Q84,30 79,30Q84,30 84,25z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M30,38.5Q30,42 33.5,42Q30,42 30,45.5Q30,42 26.5,42Q30,42 30,38.5z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M86,67Q86,70 89,70Q86,70 86,73Q86,70 83,70Q86,70 86,67z" />
+    </group>
+</vector>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splashy Glide launcher background: warm teak veneer with vertical grain. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="108" android:endY="108">
+                <item android:offset="0" android:color="#FFD69552" />
+                <item android:offset="0.55" android:color="#FFA9622A" />
+                <item android:offset="1" android:color="#FF6B3211" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:strokeColor="#2E3D1A06" android:strokeWidth="2.2" android:fillColor="#00000000"
+        android:pathData="M10,0C13,30 7,62 11,108M24,0C21,34 28,70 23,108M38,0C41,26 35,58 40,108M52,0C49,38 56,72 51,108M67,0C70,30 63,64 68,108M82,0C79,36 86,70 81,108M96,0C99,28 92,66 97,108" />
+    <path android:strokeColor="#1FFFE7C2" android:strokeWidth="1.2" android:fillColor="#00000000"
+        android:pathData="M17,0C19,32 14,66 18,108M45,0C47,30 42,62 46,108M74,0C76,34 70,68 75,108M101,0C103,30 99,64 102,108" />
+    <path android:fillColor="#40000000" android:pathData="M0,84h108v24h-108z" />
+</vector>
