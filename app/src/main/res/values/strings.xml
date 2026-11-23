@@ -1,10 +1,10 @@
 <resources>
-    <string name="app_name">Splashy Glide</string>
+    <string name="app_name">Maze Brush: Paint Puzzle Game</string>
 
     <!-- Notification channels (shown in system Settings > Notifications) -->
     <string name="channel_reminders_name">Daily reminders</string>
     <string name="channel_reminders_desc">A friendly nudge at 9 AM and 7 PM to paint a few mazes.</string>
     <string name="channel_news_id" translatable="false">news_events</string>
     <string name="channel_news_name">News &amp; events</string>
-    <string name="channel_news_desc">New worlds, skins, events and rewards from the Splashy Glide team.</string>
+    <string name="channel_news_desc">New worlds, skins, events and rewards from the Maze Brush team.</string>
 </resources>

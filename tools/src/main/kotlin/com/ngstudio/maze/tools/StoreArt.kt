@@ -189,13 +189,13 @@ object StoreArt {
             g.paint = fill
             g.fill(shape)
         }
-        title("SPLASHY", 60.0, 210.0, 118f, c(0xFFF4E0))
-        title("GLIDE", 92.0, 330.0, 132f, c(0xF6B93B))
+        title("MAZE", 60.0, 210.0, 118f, c(0xFFF4E0))
+        title("BRUSH", 92.0, 330.0, 132f, c(0xF6B93B))
         g.font = base.deriveFont(34f)
         g.paint = c(0x7A2E6E, 150)
-        g.drawString("Swipe. Glide. Paint every tile!", 66, 424)
+        g.drawString("Swipe. Slide. Paint every tile!", 66, 424)
         g.paint = c(0xFFFFFF)
-        g.drawString("Swipe. Glide. Paint every tile!", 64, 420)
+        g.drawString("Swipe. Slide. Paint every tile!", 64, 420)
         g.dispose()
         return img
     }

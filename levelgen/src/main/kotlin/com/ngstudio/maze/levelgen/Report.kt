@@ -9,12 +9,12 @@ object Report {
 
     fun html(levels: List<Level>, targets: List<Double>, attempts: List<Int>, daily: List<Level>): String = buildString {
         append("<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>")
-        append("<title>Splashy Glide levels</title><style>")
+        append("<title>Maze Brush levels</title><style>")
         append("body{font-family:system-ui,sans-serif;margin:24px;background:#fff7fb;color:#2d2140}h1{color:#c2187a}")
         append("table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #e6d5ea;padding:4px 8px;text-align:right}")
         append(".grid{display:flex;flex-wrap:wrap;gap:16px}.card{background:#fff;border-radius:12px;padding:10px;box-shadow:0 2px 8px #0001}")
         append(".card p{margin:4px 0 0;font-size:12px}</style></head><body>")
-        append("<h1>Splashy Glide &mdash; ${levels.size} levels + ${daily.size} daily</h1>")
+        append("<h1>Maze Brush &mdash; ${levels.size} levels + ${daily.size} daily</h1>")
         append("<p>Every level passed the validator (no traps, every tile paintable, no endless loops) and its stored solution was replayed.</p>")
 
         // ---- difficulty chart

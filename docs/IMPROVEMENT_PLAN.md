@@ -1,4 +1,4 @@
-# Splashy Glide — Improvement Plan
+# Maze Brush — Improvement Plan
 _Written 2026-11-18 as a self-review of the game. "Now" items are implemented in this pass; "Later" items are the backlog._
 
 ## How I reviewed it
@@ -9,7 +9,7 @@ _Written 2026-11-18 as a self-review of the game. "Now" items are implemented in
   - fair help when stuck;
   - cosmetics you can try before buying;
   - rewarded ads only where the player opts in.
-- Read the reference game's Play reviews. The top complaints were an ad after every level, levels that trap you, and a level that would not advance. Splashy Glide already avoids all three by design (no forced ads, verified levels).
+- Read the reference game's Play reviews. The top complaints were an ad after every level, levels that trap you, and a level that would not advance. Maze Brush already avoids all three by design (no forced ads, verified levels).
 
 ## What is already strong (keep)
 - **Verified levels:** every level is solvable and can never trap you, and its stored solution is replayed in tests.

@@ -8,13 +8,14 @@ plugins {
 }
 
 android {
-    namespace = "com.ngstudio.maze"
+    namespace = "com.ngstudio.mazebrush"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.ngstudio.maze"
+        // Store id (permanent once on Play); same as the namespace / Kotlin package.
+        applicationId = "com.ngstudio.mazebrush"
         minSdk = 24
         targetSdk = 37
         versionCode = 1

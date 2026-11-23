@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Splashy Glide - automatic device QA (debug build).
+# Maze Brush - automatic device QA (debug build).
 #
 #   scripts/device_qa.sh                 # default sample: one level from every world + tile intros
 #   LEVELS="11 15 27" scripts/device_qa.sh
@@ -16,7 +16,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ADB="${ADB:-$HOME/Library/Android/sdk/platform-tools/adb}"
-PKG=com.ngstudio.maze
+PKG=com.ngstudio.mazebrush
 export JAVA_HOME="${JAVA_HOME:-/Applications/Android Studio.app/Contents/jbr/Contents/Home}"
 LEVELS="${LEVELS:-1 11 21 41 71 111 251 760 1001 1251 1501 1751 2001 2251 3500 4999}"
 TIMEOUT="${TIMEOUT:-90}"

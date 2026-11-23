@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="com.ngstudio.maze.core.CodecAndGeneratorTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-18T17:18:23.133Z" hostname="ngd-vis-MacBook-Air.local" time="0.036">
+<testsuite name="com.ngstudio.maze.core.CodecAndGeneratorTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-23T12:48:46.997Z" hostname="192.168.1.37" time="0.179">
   <properties/>
-  <testcase name="generatorIsDeterministic" classname="com.ngstudio.maze.core.CodecAndGeneratorTest" time="0.028"/>
-  <testcase name="codecRoundTrip" classname="com.ngstudio.maze.core.CodecAndGeneratorTest" time="0.007"/>
+  <testcase name="generatorIsDeterministic" classname="com.ngstudio.maze.core.CodecAndGeneratorTest" time="0.126"/>
+  <testcase name="codecRoundTrip" classname="com.ngstudio.maze.core.CodecAndGeneratorTest" time="0.042"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>
 </testsuite>

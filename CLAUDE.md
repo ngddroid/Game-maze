@@ -1,12 +1,12 @@
-# Splashy Glide — Developer & AI Guide
+# Maze Brush — Developer & AI Guide
 _Last updated: 2026-11-18 (after the move-limit pass)_
 
 Read this first. It explains what the game is, how it is built, and how to change it safely.
 It is written for both human developers and AI coding assistants.
 
 ## 1. What this is
-**Splashy Glide** is an original Android puzzle game in the "slide-and-paint" genre. You swipe; the ball slides until it hits a wall and paints every tile it rolls over. You win when every tile is painted.
-- **Package / applicationId:** `com.ngstudio.maze` (project folder `Maze`). This id is permanent once the app is on Google Play.
+**Maze Brush** (Play title "Maze Brush: Paint Puzzle Game"; formerly the working name "Splashy Glide") is an original Android puzzle game in the "slide-and-paint" genre. You swipe; the ball slides until it hits a wall and paints every tile it rolls over. You win when every tile is painted.
+- **Package / applicationId:** `com.ngstudio.mazebrush` (changed from `com.ngstudio.maze` on 2026-11-23). This id is permanent once the app is on Google Play. The app module's `namespace` and Kotlin packages are `com.ngstudio.mazebrush` too (the `core`, `levelgen` and `tools` modules keep `com.ngstudio.maze.*`). The app name (`app_name`, launcher label) is "Maze Brush: Paint Puzzle Game", the same as the Play title; launchers may shorten it under the icon.
 - **Content:** 5000 levels, plus a 366-level Daily Challenge pool. Levels 1–10 are hand-made tutorials with unlimited moves. From level 11 every level has a **move limit** (par + a shrinking allowance), which is what makes them properly hard. Every level is machine-verified: it is always solvable, you can never get trapped, and its verified solution fits the move limit.
 - **Look:** the whole screen is one real surface material, and the maze is carved into it. World 1 is "Golden Teak": a pale golden maple with wide, soft wavy grain (`MaterialArt.grain` with `LIGHT_MAPLE`), dark-brown ink, an espresso channel and a pearl ball. The UI chrome is warm polished wood (brown buttons, pills and bars) with cream text; content cards are cream with a gold rim (`ui/theme/Theme.kt` → `Pro`). The level previews on the Home and Daily cards use a richer polished-teak tile (`board_wood.jpg`, rendered by `:tools:run --args="surfaces"`, `MiniBoard(cardWood = true)`, world 1 only). The in-game board matches it: the maze is carved into a rounded wood slab (`board_wood.jpg` in world 1, the world's own surface elsewhere) inside a cream card with a gold rim, drawn by `BAKE_FS`. The game HUD uses the same pieces as Home: `WorldBadge(small = true)`, leaves, and `QuickTile` wood tiles for Undo / Restart / Hint. Home also has code-drawn leaf clusters in all four corners (`ui/components/Decor.kt`: `TopLeaves`, and `BottomLeaves` growing up from the bottom screen corners, behind the nav bar). There are 10 worlds: Golden Teak, Marble Hall, Pastel Clay, Walnut Study, Frost Ice, Zen Sand, Jade Stone, Slate Night, Cherry Wood and Sandstone. Each world covers 250 levels, and the list repeats after level 2500.
 - **Inspiration and limits:** the gameplay genre and the quality bar follow AMAZE! by CrazyLabs. **Do not copy its look**: no orange wood combined with a gold ball, no glitter tubes, no purple wave banner, and no copying of its HUD, icons, levels or name. The art, levels, sounds and icon here are all original. The fonts are OFL-licensed.
@@ -37,7 +37,7 @@ Other folders:
 - **`docs/store/`:** the Play icon (512) and the feature graphic.
 - **`docs/qa/`:** QA run output. It is git-ignored.
 
-### Inside `app/src/main/java/com/ngstudio/maze/`
+### Inside `app/src/main/java/com/ngstudio/mazebrush/`
 ```
 MazeApp.kt            singletons: store, levels, sound, haptics, telemetry
 telemetry/            Telemetry: the only code that touches Firebase Analytics/Crashlytics (never throws)
@@ -71,17 +71,17 @@ ui/screens/           StudioIntroScreen (NG Studio ident), SplashScreen, Onboard
 - **Test device:** a Realme RMX5313 (720×1600, Mali-G57, Android 16) is the reference phone. `adb shell input` works on it. adb is not on PATH, so use `~/Library/Android/sdk/platform-tools/adb`.
 - **FPS:** debug builds log `MazeGL fps=…` every 3 s (`adb logcat | grep MazeGL`). The target is 60, which the Realme reaches.
 - **Automatic device QA:** `scripts/device_qa.sh` (or `LEVELS="11 59 260" scripts/device_qa.sh`). It runs the core tests, builds, installs, backs up progress, autoplays each level (`--ez autoplay true`) until the `MazeQA WIN` log line, screenshots the start and the win, collects fps, fails on any crash or GL error, and restores progress. Output goes to `docs/qa/<time>/report.md` (git-ignored).
-- **Open any level for QA (debug only):** opening it changes nothing, but a **win still saves** (stars, coins, next level unlocked), so back up progress before autoplaying the tester's current level. `adb shell am start -S -n com.ngstudio.maze/.MainActivity --ei debugLevel 251`. Add `--ez autoplay true` to have it play the stored solution.
+- **Open any level for QA (debug only):** opening it changes nothing, but a **win still saves** (stars, coins, next level unlocked), so back up progress before autoplaying the tester's current level. `adb shell am start -S -n com.ngstudio.mazebrush/.MainActivity --ei debugLevel 251`. Add `--ez autoplay true` to have it play the stored solution.
 - **Firebase events (`telemetry/Telemetry.kt`):**
   - Every route logs `screen_view`: studio_intro, splash, onboarding, home_<tab>, game, game_daily, settings.
   - Levels log `level_start` (level, mode, world, par, move_limit, attempt) and `level_end`. A win is `success=true` with moves, stars, coins, first_clear and hints_used; a restart, retry or Home is `success=false` with a reason and painted_pct. Also `out_of_moves` and `hint_used`.
   - The economy logs `spend_virtual_currency` (hint, moves_5, <tab>_<id> skins) and `earn_virtual_currency` (level, daily, calendar, achievement, ad_x2), plus `rewarded_ad` (placement), `unlock_achievement`, and `tutorial_begin` / `tutorial_complete`.
   - Crashlytics custom keys: version, build_type, last_screen, level, mode, with breadcrumbs for screens and level starts.
   - Collection is on in debug builds too (`build_type` tells them apart).
-  - To watch events live, run `adb shell setprop debug.firebase.analytics.app com.ngstudio.maze` and open Firebase → DebugView. Turn it off with `.none.`.
+  - To watch events live, run `adb shell setprop debug.firebase.analytics.app com.ngstudio.mazebrush` and open Firebase → DebugView. Turn it off with `.none.`.
   - Crashlytics was verified with a test crash on 2026-11-23 (the report arrived in the console). The test-crash tool was then removed.
 - **Debug log markers:** `MazeQA START level=… par=…` and `MazeQA WIN level=… moves=… stars=…` (used by the QA script).
-- **Keep the tester's progress safe:** back it up before `pm clear` with `adb exec-out run-as com.ngstudio.maze tar cf - shared_prefs files > progress.tar`, and restore it with `cat progress.tar | adb shell run-as com.ngstudio.maze tar xf -`.
+- **Keep the tester's progress safe:** back it up before `pm clear` with `adb exec-out run-as com.ngstudio.mazebrush tar cf - shared_prefs files > progress.tar`, and restore it with `cat progress.tar | adb shell run-as com.ngstudio.mazebrush tar xf -`.
 - **Debug tools (debug build only, in Settings):**
   - Autoplay: plays each level's stored solution automatically.
   - Unlock all 5000.
@@ -171,7 +171,7 @@ ui/screens/           StudioIntroScreen (NG Studio ident), SplashScreen, Onboard
   - **Pause (`PauseOverlay`):** deliberately unlike the win screen; it uses the Home look. Over a light warm dim, a cream `Panel` with a gold rim drops in from the top with a small swing, and a wood "PAUSED" plaque pops onto its top edge. Inside: "LEVEL N • WORLD", the paint bar with painted % and tiles left, cream `InfoChip`s for MOVES LEFT (pink at 3 or fewer) and PAR, `WoodToggle` tiles for Sound / Music / Vibrate (coloured disc when on, grey slashed disc when off), RESUME (green), and `WoodButton`s for Restart / Home. Tapping outside the card resumes. To screenshot it on a phone that blocks injected input, send the app Home and bring it back (going to the background pauses the game).
   - **Also:** coach marks for new tiles.
 - **Notifications (ported from Ridge Riders):**
-  - **Daily reminders** at 9:00 and 19:00 device time (`DailyReminders`). There are 7 morning and 7 evening game-themed messages that rotate by day of year. Alarms are one-shot and re-arm when they fire, on every launch, and after a reboot, an app update or a clock change (`ReminderBootReceiver`). Android 12+ uses a 10-minute window (no exact-alarm permission). They are skipped while the game is on screen. There is no in-game toggle (removed at the user's request): reminders are always armed, and players mute them in Android's notification settings (channel "Daily reminders"). Covered by `app/src/test/.../DailyRemindersTest`.
+  - **Daily reminders** at 9:00 and 19:00 device time (`DailyReminders`). There are 7 morning and 7 evening game-themed messages that rotate by day of year. Alarms are one-shot and re-arm when they fire, on every launch, and after a reboot, an app update or a clock change (`ReminderBootReceiver`). Android 12+ uses a 10-minute window (no exact-alarm permission). They are skipped while the game is on screen. There is no in-game toggle (removed at the user's request): reminders are always armed, and players mute them in Android's notification settings (channel "Daily reminders"). Covered by `app/src/test/java/com/ngstudio/mazebrush/notifications/DailyRemindersTest`.
   - **Push (FCM):** every install subscribes to the topic `all`. Debug builds log `MazePush: FCM token: …` for Firebase console > Messaging > "Send test message". Background notification messages use the manifest's default icon (`ic_stat_notify`), colour (`notify_accent`) and channel (`news_events`). Foreground and data-only messages (keys `title` and `body`) are posted by `PushService`.
   - **Permission:** on Android 13+, the app asks once per launch on Home until it is granted.
   - **Events:** `reminder_shown`, `notification_tap` (source), and `notif_permission_granted/denied`.
@@ -216,7 +216,8 @@ ui/screens/           StudioIntroScreen (NG Studio ident), SplashScreen, Onboard
 2. **Signing:** create an upload keystore and set it in `app/build.gradle.kts`; release currently uses the debug key.
 3. **Data safety form:** declare what Firebase collects: app interactions, crash logs and diagnostics, and device or other IDs (the app-instance ID and the FCM token; not the advertising ID). It is not shared, it is processed by Google, it is encrypted in transit, and it can't be deleted on request in-app. The privacy policy (`assets/legal/privacy.html`) has an "Analytics and crash reports", "Notifications" and "App updates" sections, and the terms have Updates, Notifications and Third-party services (all updated 23 Nov 2026). Both end with a **"Contact us"** card: a question line with the email, then the developer details (NGENDEV TECHNOLABS LLP (NGD Technolab), the Rajkot address, the phone as a `tel:` link, and `store.ngdtechnolab@gmail.com` as a `mailto:` link; `LegalActivity` opens these in the dialer and email app). Below it, outside the cards and on the page background, is a centred **"PROVIDED BY"** footer (`.provided`): the spaced-out label over the NG Studio logo (`assets/legal/ng_studio_logo.png`, a cut-out of `docs/store/ng_studio_logo.png` made by `tools/studio_intro/CutLogo.java`, which removes the image's baked-in checkerboard). (The governing-law line was removed from the terms at the user's request.) Also complete the content rating questionnaire.
 4. **Real ads** (see §8), then update the privacy policy with the ad partners.
-5. **Name:** re-check "Splashy Glide" on Play and for trademarks just before publishing. It had no exact match on 2026-11-18.
+5. **Name:** "Maze Brush: Paint Puzzle Game" (chosen 2026-11-23 to replace "Splashy Glide", which was close to Voodoo's "Splashy!"). Re-check it on Play and IP India (classes 9 and 41) just before publishing. Do not use other apps' names (for example "Maze Go") in the listing.
+7. **Firebase for the new package:** add an Android app with package `com.ngstudio.mazebrush` to Firebase project `game-maze-647dc` and replace `app/google-services.json`. Until then the build fails with "No matching client found for package name 'com.ngstudio.mazebrush'".
 6. **Store assets** are in `docs/store` (icon_512, feature_graphic). Screenshots are still needed.
 
 ## 11. Progress log (all on 2026-11-18)
