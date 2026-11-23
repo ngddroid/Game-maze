@@ -6,10 +6,12 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <!-- System splash (androidx core-splashscreen): deep teak + app icon, then the animated Compose splash. -->
+    <!-- System splash (androidx core-splashscreen): plain white with no icon, so it flows straight into the
+         NG Studio intro (StudioIntroScreen), which then cross-fades into the animated Compose splash. -->
     <style name="Theme.Maze.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@color/splash_bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_blank</item>
+        <item name="windowSplashScreenAnimationDuration">300</item>
         <item name="postSplashScreenTheme">@style/Theme.Maze</item>
     </style>
 </resources>

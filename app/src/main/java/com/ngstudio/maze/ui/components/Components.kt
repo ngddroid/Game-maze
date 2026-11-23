@@ -148,7 +148,7 @@ fun CandyButton(
     val top = if (enabled) color else Candy.grey
     val lip = if (enabled) dark else Candy.greyDark
     val lipH = 6.dp
-    val shape = RoundedCornerShape(height / 3.2f)
+    val shape = RoundedCornerShape(height / 2.2f)
     Box(
         modifier
             .height(height + lipH)
@@ -160,11 +160,18 @@ fun CandyButton(
             Modifier
                 .fillMaxWidth().height(height).offset(y = lipH * press)
                 .clip(shape)
-                .background(Brush.verticalGradient(listOf(lerp(top, Color.White, 0.22f), top, lerp(top, lip, 0.2f))))
+                .background(Brush.verticalGradient(listOf(lerp(top, Color.White, 0.30f), top, lerp(top, lip, 0.28f))))
                 .drawBehind {
-                    drawRoundRect(Color.White.copy(alpha = 0.28f), Offset(size.width * 0.05f, size.height * 0.08f),
-                        Size(size.width * 0.9f, size.height * 0.30f), CornerRadius(size.height * 0.2f))
-                },
+                    // glossy band across the top half
+                    val gh = size.height * 0.40f
+                    drawRoundRect(
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.42f), Color.White.copy(alpha = 0.10f)), size.height * 0.07f, size.height * 0.07f + gh),
+                        Offset(size.width * 0.035f, size.height * 0.07f), Size(size.width * 0.93f, gh), CornerRadius(gh / 2f),
+                    )
+                    // soft darker bottom edge
+                    drawRect(Brush.verticalGradient(listOf(Color.Transparent, lip.copy(alpha = 0.35f)), size.height * 0.75f, size.height), Offset(0f, size.height * 0.75f), Size(size.width, size.height * 0.25f))
+                }
+                .border(1.5.dp, Brush.verticalGradient(listOf(lerp(top, Color.White, 0.55f), lerp(top, lip, 0.4f))), shape),
             contentAlignment = Alignment.Center,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
@@ -206,7 +213,7 @@ fun RoundButton(
         Box(
             Modifier.size(size).offset(3.dp, 3.dp + lip * press).clip(shape)
                 .background(Brush.verticalGradient(listOf(lerp(color, Color.White, 0.16f), color, lerp(color, Color.Black, 0.12f))))
-                .border(1.dp, Color.White.copy(alpha = 0.18f), shape),
+                .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.35f), Color.Transparent)), shape),
             contentAlignment = Alignment.Center,
         ) { GameIcon(icon, iconColor, size = size * 0.5f) }
         if (badge != null) {
@@ -229,11 +236,13 @@ fun Panel(
 ) {
     Column(
         modifier
-            .shadow(12.dp, RoundedCornerShape(corner), ambientColor = Pro.chromeLip, spotColor = Pro.chromeLip)
+            .shadow(12.dp, RoundedCornerShape(corner), ambientColor = Pro.rimDark, spotColor = Pro.chromeLip)
             .clip(RoundedCornerShape(corner))
-            .background(Brush.verticalGradient(listOf(Color.White, color, lerp(color, Pro.border, 0.25f))))
-            .border(1.5.dp, Pro.border, RoundedCornerShape(corner))
-            .padding(padding),
+            .background(Brush.verticalGradient(listOf(Color.White, color, lerp(color, Pro.border, 0.22f))))
+            .border(4.dp, Brush.verticalGradient(listOf(Pro.rimLight, Pro.rimDark, Pro.rimLight)), RoundedCornerShape(corner))
+            .padding(4.dp)
+            .border(1.5.dp, Color.White.copy(alpha = 0.75f), RoundedCornerShape(corner - 4.dp))
+            .padding((padding - 4.dp).coerceAtLeast(0.dp)),
         horizontalAlignment = Alignment.CenterHorizontally,
         content = content,
     )
@@ -246,8 +255,8 @@ fun CounterPill(value: String, modifier: Modifier = Modifier, leading: @Composab
         modifier
             .height(38.dp)
             .shadow(3.dp, RoundedCornerShape(19.dp))
-            .background(Pro.glass, RoundedCornerShape(19.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(19.dp))
+            .background(Brush.verticalGradient(listOf(Pro.chrome, Pro.chromeDark)), RoundedCornerShape(19.dp))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Pro.chromeLip.copy(alpha = 0.6f))), RoundedCornerShape(19.dp))
             .padding(start = 6.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

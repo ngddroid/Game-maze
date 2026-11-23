@@ -79,8 +79,20 @@ uniform vec2 uBakeOrigin;           // bake (0,0) in screen pixels
 uniform int uMode;                  // 0 colour, 1 floor mask / AO / shadow
 uniform vec3 uFloorA;
 uniform vec3 uFloorB;
+// The board sits on a wood slab inside a cream card with a gold rim (same look as the Home level card).
+uniform vec4 uCard;                 // card rect in bake pixels (x, y, w, h)
+uniform vec4 uSlab;                 // wood slab rect in bake pixels
+uniform float uDp;                  // pixels per dp
+uniform sampler2D uWood;            // polished board wood (world 1) ...
+uniform int uWoodOn;                // ... or 0: the world's own surface
+uniform vec2 uWoodOffset;           // slab-pixel offset into the cover-cropped wood image
+uniform vec2 uWoodSize;             // displayed wood image size in pixels
 out vec4 o;
 """ + COMMON + SURFACE + """
+vec3 woodAt(vec2 bp, vec2 sp) {
+    if (uWoodOn == 0) return surfaceAt(sp);
+    return texture(uWood, (bp - uSlab.xy + uWoodOffset) / uWoodSize).rgb;
+}
 const float HF = 0.13;  // inner wall face visible inside the channel, below each wall (cells)
 float isFloor(ivec2 c) {
     if (c.x < 0 || c.y < 0 || c.x >= uGridSize.x || c.y >= uGridSize.y) return 0.0;
@@ -126,7 +138,40 @@ void main() {
         o = vec4((1.0 - wall) * (1.0 - face), ao, inner, 1.0);
         return;
     }
-    vec3 surf = surfaceAt(sp);
+    // ---- card + slab shapes
+    vec2 cc = uCard.xy + uCard.zw * 0.5;
+    float dCard = sdBox(vPix - cc, uCard.zw * 0.5, 24.0 * uDp);
+    vec2 sc = uSlab.xy + uSlab.zw * 0.5;
+    float slabR = 0.6 * uCell;
+    float dSlab = sdBox(vPix - sc, uSlab.zw * 0.5, slabR);
+    if (dSlab > 0.0) {
+        float a1 = 1.0 / max(uDp, 1.0);
+        // soft brown drop shadow under the card
+        float sh = 1.0 - smoothstep(-6.0 * uDp, 12.0 * uDp, sdBox(vPix - cc - vec2(0.0, 5.0 * uDp), uCard.zw * 0.5, 24.0 * uDp));
+        vec4 col = vec4(vec3(0.29, 0.14, 0.05) * 0.34 * sh, 0.34 * sh);
+        float inCard = 1.0 - smoothstep(-0.8, 0.8, dCard);
+        if (inCard > 0.0) {
+            float t = clamp((vPix.y - uCard.y) / uCard.w, 0.0, 1.0);
+            vec3 rimL = vec3(1.0, 0.851, 0.541), rimD = vec3(0.878, 0.573, 0.180);
+            vec3 rim = mix(rimL, rimD, 1.0 - abs(t * 2.0 - 1.0));
+            rim *= 1.0 + 0.18 * (1.0 - smoothstep(0.0, 1.5 * uDp, -dCard));   // bright outer lip
+            vec3 cream = vec3(1.0, 0.973, 0.937), border = vec3(0.929, 0.710, 0.376);
+            vec3 body = t < 0.5 ? mix(vec3(1.0), cream, t * 2.0) : mix(cream, mix(cream, border, 0.22), t * 2.0 - 1.0);
+            // the slab sits in the card with a soft contact shadow
+            body *= 1.0 - 0.22 * (1.0 - smoothstep(0.0, 7.0 * uDp, dSlab - 2.0 * uDp));
+            float inRim = smoothstep(-4.0 * uDp - 0.8, -4.0 * uDp + 0.8, dCard);
+            vec3 c = mix(body, rim, inRim);
+            float line = (1.0 - smoothstep(0.0, 0.9, abs(dCard + 4.8 * uDp) - 0.75 * uDp)) * (1.0 - inRim);
+            c = mix(c, vec3(1.0), 0.75 * line);
+            col = vec4(c * inCard, inCard) + col * (1.0 - inCard);
+        }
+        // dark outline hugging the slab
+        float ol = 1.0 - smoothstep(0.0, 1.0, abs(dSlab - 0.035 * uCell) - 0.035 * uCell);
+        col.rgb = mix(col.rgb, vec3(0.26, 0.12, 0.04) * col.a, 0.55 * ol);
+        o = col;
+        return;
+    }
+    vec3 surf = woodAt(vPix, sp);
     // wall top with a small rounded bevel on the carved edge
     vec2 e = vec2(0.012, 0.0);
     vec2 g = vec2(F(p + e.xy) - F(p - e.xy), F(p + e.yx) - F(p - e.yx));
@@ -137,7 +182,7 @@ void main() {
     vec3 top = surf * (1.0 + 0.50 * (dif - L.z));
     top += vec3(0.05) * bev * max(dif - L.z, 0.0) * 4.0;
     // the face: lit near the top edge, darker where it meets the floor
-    vec3 faceCol = surfaceAt(sp + vec2(0.0, 41.0)) * mix(0.92, 0.60, faceT);
+    vec3 faceCol = woodAt(vPix + vec2(0.0, 41.0), sp + vec2(0.0, 41.0)) * mix(0.92, 0.60, faceT);
     faceCol *= 1.0 - 0.25 * smoothstep(0.75, 1.0, faceT);
     // channel floor: tile grid, ambient occlusion, inner shadow
     vec3 fl = mix(uFloorB, uFloorA, ao);
@@ -148,6 +193,9 @@ void main() {
     fl *= 1.0 - 0.45 * inner;
     vec3 c = mix(fl, faceCol, face);
     c = mix(c, top, wall);
+    // slab rim: a slight bevel just inside the edge, then the dark outline
+    c *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.18 * uCell, -dSlab));
+    c = mix(c, vec3(0.26, 0.12, 0.04), 0.55 * (1.0 - smoothstep(0.0, 1.0, abs(dSlab - 0.035 * uCell) - 0.035 * uCell)));
     o = vec4(c, 1.0);
 }
 """
@@ -175,7 +223,8 @@ uniform vec2 uOrigin;
 uniform vec3 uPaintA;
 uniform vec3 uPaintB;
 uniform float uTime;
-uniform float uShine;               // win sweep position (-1 = off)
+uniform float uShine;               // win wave front radius in cells (-1 = off)
+uniform vec2 uWaveOrigin;           // win wave centre (the ball), in cells
 uniform float uFinish;              // 0 classic, 1 pastel, 2 neon, 3 metallic, 4 rainbow, 5 gradient
 uniform float uGlow;                // world with glowing paint
 uniform float uAlpha;
@@ -239,8 +288,14 @@ void main() {
     vec2 lc = p - bestCell - 0.5;
     col += vec3(0.18) * (1.0 - smoothstep(0.0, 0.07, abs(length(lc) - age * 1.6))) * exp(-age * 4.0);
     if (uShine > -0.5) {
-        float sp = (p.x + p.y) / float(uGridSize.x + uGridSize.y);
-        col += vec3(0.55) * (1.0 - smoothstep(0.0, 0.07, abs(sp - uShine)));
+        // win: a bright ring of light ripples out from the ball, with a softer echo behind it,
+        // and every tile it passes keeps a warm afterglow that fades back
+        float d = length(p - uWaveOrigin);
+        float ring = 1.0 - smoothstep(0.0, 0.9, abs(d - uShine));
+        float echo = 1.0 - smoothstep(0.0, 1.4, abs(d - (uShine - 2.6)));
+        float after = smoothstep(0.0, 1.0, uShine - d) * exp(-max(uShine - d, 0.0) * 0.22);
+        col = mix(col, vec3(1.0), 0.55 * ring);
+        col += base * 0.35 * echo + vec3(0.10) * after;
     }
     if ((uFinish > 1.5 && uFinish < 2.5) || uGlow > 0.5) col *= 1.12 + 0.08 * sin(uTime * 3.0 + p.x * 0.7);
     float a = cov * m.r * uAlpha;

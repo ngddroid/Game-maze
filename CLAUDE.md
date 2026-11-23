@@ -8,7 +8,7 @@ It is written for both human developers and AI coding assistants.
 **Splashy Glide** is an original Android puzzle game in the "slide-and-paint" genre. You swipe; the ball slides until it hits a wall and paints every tile it rolls over. You win when every tile is painted.
 - **Package / applicationId:** `com.ngstudio.maze` (project folder `Maze`). This id is permanent once the app is on Google Play.
 - **Content:** 5000 levels, plus a 366-level Daily Challenge pool. Levels 1–10 are hand-made tutorials with unlimited moves. From level 11 every level has a **move limit** (par + a shrinking allowance), which is what makes them properly hard. Every level is machine-verified: it is always solvable, you can never get trapped, and its verified solution fits the move limit.
-- **Look:** the whole screen is one real surface material, and the maze is carved into it. World 1 is "Golden Teak": a rich teak/walnut **veneer** with vertical grain, caramel and dark-brown streaks and dark pore ticks (`MaterialArt.veneer`), an espresso channel and a pearl ball. The UI chrome is dark espresso "glass" with cream text and gold highlights; content cards are cream (`ui/theme/Theme.kt` → `Pro`). There are 10 worlds: Golden Teak, Marble Hall, Pastel Clay, Walnut Study, Frost Ice, Zen Sand, Jade Stone, Slate Night, Cherry Wood and Sandstone. Each world covers 250 levels, and the list repeats after level 2500.
+- **Look:** the whole screen is one real surface material, and the maze is carved into it. World 1 is "Golden Teak": a pale golden maple with wide, soft wavy grain (`MaterialArt.grain` with `LIGHT_MAPLE`), dark-brown ink, an espresso channel and a pearl ball. The UI chrome is warm polished wood (brown buttons, pills and bars) with cream text; content cards are cream with a gold rim (`ui/theme/Theme.kt` → `Pro`). The level previews on the Home and Daily cards use a richer polished-teak tile (`board_wood.jpg`, rendered by `:tools:run --args="surfaces"`, `MiniBoard(cardWood = true)`, world 1 only). The in-game board matches it: the maze is carved into a rounded wood slab (`board_wood.jpg` in world 1, the world's own surface elsewhere) inside a cream card with a gold rim, drawn by `BAKE_FS`. The game HUD uses the same pieces as Home: `WorldBadge(small = true)`, leaves, and `QuickTile` wood tiles for Undo / Restart / Hint. Home also has code-drawn leaf clusters in all four corners (`ui/components/Decor.kt`: `TopLeaves`, and `BottomLeaves` growing up from the bottom screen corners, behind the nav bar). There are 10 worlds: Golden Teak, Marble Hall, Pastel Clay, Walnut Study, Frost Ice, Zen Sand, Jade Stone, Slate Night, Cherry Wood and Sandstone. Each world covers 250 levels, and the list repeats after level 2500.
 - **Inspiration and limits:** the gameplay genre and the quality bar follow AMAZE! by CrazyLabs. **Do not copy its look**: no orange wood combined with a gold ball, no glitter tubes, no purple wave banner, and no copying of its HUD, icons, levels or name. The art, levels, sounds and icon here are all original. The fonts are OFL-licensed.
 - **Monetisation:** none yet. Ads come later; see §8.
 
@@ -17,7 +17,8 @@ It is written for both human developers and AI coding assistants.
 - **UI:** Jetpack Compose (BOM 2026.02.01) and `core-splashscreen`. The app has a single activity; `LegalActivity` shows Terms and Privacy.
 - **Playfield:** a custom **OpenGL ES 3.0** renderer (`GLSurfaceView`), with the HUD drawn on top in Compose.
 - **No external art or audio:** sounds and music are synthesized by `tools`; surfaces, icons and store graphics are rendered by `tools`.
-- **No DI, no network, no database.** Settings live in SharedPreferences; stars are stored in an `AtomicFile`.
+- **No DI, no database.** Settings live in SharedPreferences; stars are stored in an `AtomicFile`.
+- **Firebase (project `game-maze-647dc`, `app/google-services.json`):** Analytics and Crashlytics, BoM 33.7.0, google-services plugin 4.4.2, Crashlytics plugin 3.0.2 (the same versions as Ridge Riders). Firebase Cloud Messaging and Play in-app updates are covered below; these are the only network use. The manifest removes the advertising-ID permissions and turns off ad personalisation; delete those lines when real ads arrive. Release builds upload the R8 mapping file to Crashlytics (`uploadCrashlyticsMappingFileRelease`). `keepRules/rules.keep` keeps every Firebase `ComponentRegistrar` constructor: without it, R8 full mode crashed Ridge Riders' release build on launch with "FirebaseCrashlytics component is not present".
 - **Gradle JDK:** use Android Studio's JBR:
   `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"`
 
@@ -38,7 +39,11 @@ Other folders:
 
 ### Inside `app/src/main/java/com/ngstudio/maze/`
 ```
-MazeApp.kt            singletons: store, levels, sound, haptics
+MazeApp.kt            singletons: store, levels, sound, haptics, telemetry
+telemetry/            Telemetry: the only code that touches Firebase Analytics/Crashlytics (never throws)
+notifications/        Notifications (channels, permission, show), DailyReminders (9 AM / 7 PM alarms + messages), ReminderReceivers
+push/                 Push (FCM init, topic "all"), PushService (FirebaseMessagingService)
+update/               AppUpdater (Google Play in-app updates); UI in ui/screens/UpdateOverlay.kt
 MainActivity.kt       Compose back stack: Splash → Onboarding → Home(tabs) ⇄ Game / Settings
 LegalActivity.kt      WebView: file:///android_asset/legal/{terms,privacy}.html (JS off, no network)
 render/               GameRenderer (all GL), Shaders (all GLSL), Particles, GlUtil, GameGLView, Visuals (worlds, skins, trails, finishes)
@@ -46,7 +51,7 @@ game/                 GameController (rules-side state of a level), Hints, Debug
 data/                 GameStore (all saved progress + Compose state), LevelRepository (reads the .bin packs)
 audio/                SoundManager (SoundPool + music crossfade), Haptics
 ui/components/        design system: CandyButton, RoundButton (rounded square), Panel, GameText, EngravedText, GameIcon (code-drawn icons), MiniBoard, SurfaceBackground
-ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + LevelsTab, SkinsTab, DailyTab, TrophiesTab, GameScreen, SettingsScreen, AdDialogs
+ui/screens/           StudioIntroScreen (NG Studio ident), SplashScreen, OnboardingScreen (no Skip), HomeScreen + LevelsTab, SkinsTab, DailyTab, TrophiesTab, GameScreen, SettingsScreen, AdDialogs
 ```
 
 ## 4. Build, run, test
@@ -66,7 +71,15 @@ ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + Lev
 - **Test device:** a Realme RMX5313 (720×1600, Mali-G57, Android 16) is the reference phone. `adb shell input` works on it. adb is not on PATH, so use `~/Library/Android/sdk/platform-tools/adb`.
 - **FPS:** debug builds log `MazeGL fps=…` every 3 s (`adb logcat | grep MazeGL`). The target is 60, which the Realme reaches.
 - **Automatic device QA:** `scripts/device_qa.sh` (or `LEVELS="11 59 260" scripts/device_qa.sh`). It runs the core tests, builds, installs, backs up progress, autoplays each level (`--ez autoplay true`) until the `MazeQA WIN` log line, screenshots the start and the win, collects fps, fails on any crash or GL error, and restores progress. Output goes to `docs/qa/<time>/report.md` (git-ignored).
-- **Open any level for QA (debug only, unlocks nothing):** `adb shell am start -S -n com.ngstudio.maze/.MainActivity --ei debugLevel 251`. Add `--ez autoplay true` to have it play the stored solution.
+- **Open any level for QA (debug only):** opening it changes nothing, but a **win still saves** (stars, coins, next level unlocked), so back up progress before autoplaying the tester's current level. `adb shell am start -S -n com.ngstudio.maze/.MainActivity --ei debugLevel 251`. Add `--ez autoplay true` to have it play the stored solution.
+- **Firebase events (`telemetry/Telemetry.kt`):**
+  - Every route logs `screen_view`: studio_intro, splash, onboarding, home_<tab>, game, game_daily, settings.
+  - Levels log `level_start` (level, mode, world, par, move_limit, attempt) and `level_end`. A win is `success=true` with moves, stars, coins, first_clear and hints_used; a restart, retry or Home is `success=false` with a reason and painted_pct. Also `out_of_moves` and `hint_used`.
+  - The economy logs `spend_virtual_currency` (hint, moves_5, <tab>_<id> skins) and `earn_virtual_currency` (level, daily, calendar, achievement, ad_x2), plus `rewarded_ad` (placement), `unlock_achievement`, and `tutorial_begin` / `tutorial_complete`.
+  - Crashlytics custom keys: version, build_type, last_screen, level, mode, with breadcrumbs for screens and level starts.
+  - Collection is on in debug builds too (`build_type` tells them apart).
+  - To watch events live, run `adb shell setprop debug.firebase.analytics.app com.ngstudio.maze` and open Firebase → DebugView. Turn it off with `.none.`.
+  - Crashlytics was verified with a test crash on 2026-11-23 (the report arrived in the console). The test-crash tool was then removed.
 - **Debug log markers:** `MazeQA START level=… par=…` and `MazeQA WIN level=… moves=… stars=…` (used by the QA script).
 - **Keep the tester's progress safe:** back it up before `pm clear` with `adb exec-out run-as com.ngstudio.maze tar cf - shared_prefs files > progress.tar`, and restore it with `cat progress.tar | adb shell run-as com.ngstudio.maze tar xf -`.
 - **Debug tools (debug build only, in Settings):**
@@ -125,14 +138,15 @@ ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + Lev
 ## 6. Rendering (render/)
 - **One frame, in draw order:**
   1. The surface image (the world's `surface_N.jpg`, centre-cropped).
-  2. The baked board (`BAKE_FS`, rendered once per level into an FBO): the same surface around the maze; carved channels with a lit bevel; walls sit **exactly on the grid** (every wall is 1 cell thick); the wall's inner face shows as one slim band (`HF = 0.13` cell) inside the channel just below each wall; a dark floor with a thin tile grid, AO (from `depth()`, the exact distance to the nearest wall, so tiles never look "quilted") and an inner shadow from the light at the top-left.
+  2. The baked board (`BAKE_FS`, rendered once per level into an FBO): a soft shadow, a cream card with a gold rim (`uCard`), and a rounded wood slab (`uSlab`, 0.55 cell around the grid; `board_wood` + warmer channel browns in world 1, `uWoodOn`); carved channels with a lit bevel; walls sit **exactly on the grid** (every wall is 1 cell thick); the wall's inner face shows as one slim band (`HF = 0.13` cell) inside the channel just below each wall; a dark floor with a thin tile grid, AO (from `depth()`, the exact distance to the nearest wall, so tiles never look "quilted") and an inner shadow from the light at the top-left.
   3. Paint (`PAINT_FS`): a per-cell RGBA32F texture holding (progress, direction, start time, order). The wet front follows the ball, then the paint dries; the shader adds the tile grid and the win shine. A pixel in a floor tile only takes that tile's paint (no bleeding into the unpainted neighbour).
   4. Special tiles (`SPECIAL_FS`).
   5. The hint.
   6. The ball shadow, then the ball (`BALL_FS`: sphere impostor, rolling-pattern rotation matrix, studio reflection, gloss and metal).
   7. Board particles, then screen confetti.
-- **Board animation:** the board is part of the surface, so it never moves. Intro = the channels fade in ("carve"), then the ball drops in. Outro = fade out. A win shows the shine sweep and confetti cannons.
-- **The surface is an image, not GLSL noise.** Procedural noise on the GPU showed precision seams on Mali. The images are rendered on the CPU by `tools/MaterialArt.kt` (materials: wood, marble, clay, ice, sand, stone, `veneer()` for world 1, and `planks()`, which is kept but currently unused), and the menus and the MiniBoard previews use the same images, so everything matches.
+- **Slide animation (`GameRenderer.updateMove`):** each slide is timed as a whole, `0.09 + 0.12·√cells` s (×0.6 for undo), so long slides stay snappy. The ball launches over the first 22% (`LAUNCH`), then hits the wall at full speed. It stretches with speed, leaves 3 fading motion-blur ghosts, then squashes and recoils off the wall (`impactDx/Dy`). Portal jumps pause the slide clock.
+- **Board animation:** the board is part of the surface, so it never moves. Intro = the channels fade in ("carve"), then the ball drops in. Outro = fade out. A win sends a ring of light rippling out from the ball across the paint (`uShine` = ring radius, `uWaveOrigin`), with a sparkle popping on each tile it passes. The ball does two happy hops, confetti fires at 0.3 s, and the result panel opens at `WIN_PANEL_AT` (1.25 s).
+- **The surface is an image, not GLSL noise.** Procedural noise on the GPU showed precision seams on Mali. The images are rendered on the CPU by `tools/MaterialArt.kt` (materials: wood, marble, clay, ice, sand, stone, `grain()` with `LIGHT_MAPLE` for world 1 (`HONEY_OAK` kept, unused), `burl()`, and `veneer()`/`planks()`, which are kept but currently unused). `:tools:run --args="surface-preview out.png"` renders a side-by-side sheet of candidate woods with a mock maze, and the menus and the MiniBoard previews use the same images, so everything matches.
 - **To add or change a world:**
   1. Edit `WorldTheme.ALL` in `render/Visuals.kt` (material, colours, floor, paints, accent, ink).
   2. Make the same change in the `worlds` list in `tools/MaterialArt.kt`.
@@ -144,7 +158,7 @@ ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + Lev
   - All shaders output premultiplied alpha.
 
 ## 7. Screens and flow
-- **Splash:** the system splash (deep teak `#4A2410` + icon; `res/values/colors.xml splash_bg`), then an animated logo while the level packs load.
+- **Launch:** the system splash is plain white with a blank icon (`ic_splash_blank`, `Theme.Maze.Splash`). It flows straight into the **NG Studio intro** (`ui/screens/StudioIntroScreen.kt`, route `StudioIntro`, every launch, about 3.9 s, skippable by a tap after 1.2 s, no music). In the intro, the N and G fly in and collide, the orbit swoosh sweeps round with a comet head, the two stars pop, a shine passes, and STUDIO and "PLAY • CREATE • INSPIRE" settle in. It is copied exactly from the studio's Ridge Riders project (`Game-BikeRace`), including the layer images `res/drawable-nodpi/ngi_*.png`, cut from the logo by `tools/studio_intro/{seg,split}.py` (the source logo is not in this repo). It cross-fades over 600 ms into the **Splash**: an animated logo while the level packs load. `--ei debugLevel` skips both.
 - **Onboarding:** first launch only. 3 pages, Next only (**no Skip**). It goes straight into Level 1, which shows a tutorial hand; Home sits under it in the back stack.
 - **Home tabs:** Skins | Levels | **Play** (raised centre) | Daily | Trophies, plus a gear button that opens Settings.
 - **Game:**
@@ -154,9 +168,20 @@ ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + Lev
   - **Out of moves** panel: Undo, Retry, +5 moves for 80 coins, or +5 via Watch Ad (debug).
   - **Hints** follow the stored best route; when you're off it and the moves left are too few, the hint says to undo.
   - **Stuck nudge:** after 15 s without a move (from level 11 on), the Hint button pulses with a "Stuck? Try a hint" tip.
-  - **Also:** the pause sheet (resume / restart / home / sound toggles) and coach marks for new tiles.
+  - **Pause (`PauseOverlay`):** deliberately unlike the win screen; it uses the Home look. Over a light warm dim, a cream `Panel` with a gold rim drops in from the top with a small swing, and a wood "PAUSED" plaque pops onto its top edge. Inside: "LEVEL N • WORLD", the paint bar with painted % and tiles left, cream `InfoChip`s for MOVES LEFT (pink at 3 or fewer) and PAR, `WoodToggle` tiles for Sound / Music / Vibrate (coloured disc when on, grey slashed disc when off), RESUME (green), and `WoodButton`s for Restart / Home. Tapping outside the card resumes. To screenshot it on a phone that blocks injected input, send the app Home and bring it back (going to the background pauses the game).
+  - **Also:** coach marks for new tiles.
+- **Notifications (ported from Ridge Riders):**
+  - **Daily reminders** at 9:00 and 19:00 device time (`DailyReminders`). There are 7 morning and 7 evening game-themed messages that rotate by day of year. Alarms are one-shot and re-arm when they fire, on every launch, and after a reboot, an app update or a clock change (`ReminderBootReceiver`). Android 12+ uses a 10-minute window (no exact-alarm permission). They are skipped while the game is on screen. There is no in-game toggle (removed at the user's request): reminders are always armed, and players mute them in Android's notification settings (channel "Daily reminders"). Covered by `app/src/test/.../DailyRemindersTest`.
+  - **Push (FCM):** every install subscribes to the topic `all`. Debug builds log `MazePush: FCM token: …` for Firebase console > Messaging > "Send test message". Background notification messages use the manifest's default icon (`ic_stat_notify`), colour (`notify_accent`) and channel (`news_events`). Foreground and data-only messages (keys `title` and `body`) are posted by `PushService`.
+  - **Permission:** on Android 13+, the app asks once per launch on Home until it is granted.
+  - **Events:** `reminder_shown`, `notification_tap` (source), and `notif_permission_granted/denied`.
+- **In-app updates (`AppUpdater` + `UpdateOverlay`):**
+  - About 2.5 s after reaching Home, Play is asked for an update. A normal release shows our cream "UPDATE AVAILABLE" dialog (UPDATE / LATER; LATER snoozes that version for 3 days). The flexible download then shows a top banner with progress, then "Update ready → RESTART".
+  - Play update priority ≥ 4 (set per release through the Play Developer API `inAppUpdatePriority`) forces Play's full-screen immediate update. If the player backs out of it, it opens again on the next resume until installed.
+  - **Testing it:** only a build installed from Google Play (for example internal testing) can see an update. Upload a higher `versionCode` to the same track.
+  - The UI shows only on Home and Settings. Only installs from Google Play (including internal testing) see updates; sideloaded and debug builds just see none.
 - **Settings:** sound/music/vibration toggles, Rate, Share, **Terms of Use**, **Privacy Policy** (themed HTML in `assets/legal`), and debug tools.
-- **Win panel:** stars, coins that fly into the HUD counter, a perfect-streak bonus (+5 per consecutive 3★ after the first, max +25), the chest, and ×2 coins via Watch Ad (debug).
+- **Win screen (`LevelComplete`):** no card. Over a dark warm backdrop that also fades the game HUD out, a staged entrance plays. First the `BouncyTitle` letters drop in one by one, with a glint sweeping across every 2.8 s. The colour follows the result (`TitleColors.forStars`): cream with a teak outline for PERFECT (3★), lime green for GREAT (2★), ice blue for NICE (1★). PAUSED keeps the gold. Then the big glossy `GloryStar`s stamp in one by one in an arc, each with a sparkle burst, a halo and its own glint, over two counter-rotating ray layers and blinking twinkles; the middle star breathes, and empty stars are dark slots. Then a dark results card with a gold rim rises in, with "LEVEL N COMPLETE" between gold rules and `StatCell`s for MOVES | PAR | COINS (the coins count up with a spinning coin and pop at the end); streak, chest and daily `BonusLine`s go in its footer. Floating buttons rise from the bottom: x2 COINS (orange, debug ad), NEXT (green) and `GlassRound` Replay / Home. It has stars, coins that fly into the HUD counter, a perfect-streak bonus (+5 per consecutive 3★ after the first, max +25), the chest, and ×2 coins via Watch Ad (debug).
 - **Skins:** tap any item to preview it live. The action bar offers Equip, Buy (coins) or Watch Ad (debug; a free unlock).
 - **Economy (`GameStore`):**
   - Level: +10 coins, plus 5 for each star above one (first clear).
@@ -183,13 +208,13 @@ ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + Lev
 - **UI:** Compose only. Use the components in `ui/components`. Titles on the surface use `EngravedText(theme.ink)`; buttons use `CandyButton`/`RoundButton`.
 - **Strings:** English only for now (hard-coded in Compose). Move them to `strings.xml` before localising.
 - **Sounds:** looked up by name (`SoundManager`); `res/raw/keep.xml` keeps them through R8.
-- **Generated outputs:** do not hand-edit them (`levels/*.bin`, `res/raw/*.wav`, `surface_*.jpg`, mipmap PNGs, `docs/store`). Regenerate them with the tools instead.
+- **Generated outputs:** do not hand-edit them (`levels/*.bin`, `res/raw/*.wav`, `surface_*.jpg`, `board_wood.jpg`, `ngi_*.png`, mipmap PNGs, `docs/store`). Regenerate them with the tools instead.
 - **R8:** use plain `optimization { enable = true }`. The template's `packageScope` crashed release at start.
 
 ## 10. Before publishing (open items)
-1. **Fill the legal placeholders** `[Developer name]`, `[support email]` and `[country / state]` in `assets/legal/terms.html` and `privacy.html`. Host the privacy policy at a public URL for the Play listing.
+1. **Legal pages are complete.** The support email is `store.ngdtechnolab@gmail.com`. Host the privacy policy at a public URL for the Play listing.
 2. **Signing:** create an upload keystore and set it in `app/build.gradle.kts`; release currently uses the debug key.
-3. **Data safety form:** "no data collected" (until ads are added). Content rating questionnaire.
+3. **Data safety form:** declare what Firebase collects: app interactions, crash logs and diagnostics, and device or other IDs (the app-instance ID and the FCM token; not the advertising ID). It is not shared, it is processed by Google, it is encrypted in transit, and it can't be deleted on request in-app. The privacy policy (`assets/legal/privacy.html`) has an "Analytics and crash reports", "Notifications" and "App updates" sections, and the terms have Updates, Notifications and Third-party services (all updated 23 Nov 2026). Both end with a **"Contact us"** card: a question line with the email, then the developer details (NGENDEV TECHNOLABS LLP (NGD Technolab), the Rajkot address, the phone as a `tel:` link, and `store.ngdtechnolab@gmail.com` as a `mailto:` link; `LegalActivity` opens these in the dialer and email app). Below it, outside the cards and on the page background, is a centred **"PROVIDED BY"** footer (`.provided`): the spaced-out label over the NG Studio logo (`assets/legal/ng_studio_logo.png`, a cut-out of `docs/store/ng_studio_logo.png` made by `tools/studio_intro/CutLogo.java`, which removes the image's baked-in checkerboard). (The governing-law line was removed from the terms at the user's request.) Also complete the content rating questionnaire.
 4. **Real ads** (see §8), then update the privacy policy with the ad partners.
 5. **Name:** re-check "Splashy Glide" on Play and for trademarks just before publishing. It had no exact match on 2026-11-18.
 6. **Store assets** are in `docs/store` (icon_512, feature_graphic). Screenshots are still needed.
@@ -225,9 +250,11 @@ ui/screens/           SplashScreen, OnboardingScreen (no Skip), HomeScreen + Lev
    - The surface texture replaced the grid texture on unit 0.
    - A level could time out in QA when someone tapped the phone mid-run.
 
+8. **2026-11-23:** the user disliked the teak veneer. Five candidates were rendered (walnut, honey oak, mahogany, smoked ash, burl) and the user picked Honey Oak, then sent a mockup and the home screen was redesigned to match it: pale wavy maple (`Material.MAPLE = 9`, name back to "Golden Teak", dark-brown ink), warm wood chrome, gold-rimmed cards, lime-green main action, corner leaves (`Decor.kt`; a wooden shelf with striped balls under the nav bar was tried and removed at the user's request). A second pass matched the user's detail crops: raised cream `WorldBadge`, glossy pill `CandyButton` with a rim, gold double-rim `Panel`, the rich-teak card board, and `PlayOrb` (green dome in a wood ring) for the centre nav button.
+
 ## 12. Next session
 - **Ask the user how the move limits feel:** if too hard or too easy, adjust `Difficulty.slack()` only.
-- **Before publishing:** the §10 items, which are the legal placeholders, the upload keystore, the hosted privacy URL and store screenshots.
+- **Before publishing:** the §10 items, which are the upload keystore, the hosted privacy URL, the Data safety form and store screenshots.
 - **Then:**
   - real ads via `Ads.rewarded` (keep interstitials capped);
   - localisation;

@@ -37,8 +37,8 @@ object Candy {
     val lilac = Color(0xFFE9D9C4)       // beige tint for panels
     val sky = Color(0xFF3BA7F0)
     val skyDark = Color(0xFF1F74B8)
-    val mint = Color(0xFF3FBF6E)        // green: main action
-    val mintDark = Color(0xFF26864A)
+    val mint = Color(0xFF4CC23A)        // lime green: main action
+    val mintDark = Color(0xFF2E8A1F)
     val lemon = Color(0xFFFFC93C)
     val lemonDark = Color(0xFFD18E00)
     val orange = Color(0xFFFF8A3D)
@@ -51,17 +51,20 @@ object Candy {
     val goldDark = Color(0xFFE08A00)
 }
 
-/** Professional chrome on the wood: dark espresso glass, cream text, gold highlights. */
+/** Chrome on the wood: warm polished-wood buttons and bars, cream text, gold-rimmed cream cards. */
 object Pro {
-    val chrome = Color(0xFF4A2E1A)
-    val chromeDark = Color(0xFF2E1B0E)
-    val chromeLip = Color(0xFF1A0E06)
-    val glass = Color(0xE62B1A0E)
+    val chrome = Color(0xFF94532A)
+    val chromeDark = Color(0xFF6E3818)
+    val chromeLip = Color(0xFF4A230E)
+    val glass = Color(0xF2733C1B)
     val cream = Color(0xFFFFF4E0)
-    val creamDim = Color(0xB3FFF4E0)
-    val gold = Color(0xFFF6B93B)
+    val creamDim = Color(0xCCFFF4E0)
+    val gold = Color(0xFFFFC94D)
     val goldDark = Color(0xFFC98A12)
-    val border = Color(0xFFE2C08F)
+    val border = Color(0xFFEDB560)
+    /** Gold card rim: light top, deeper amber bottom. */
+    val rimLight = Color(0xFFFFD98A)
+    val rimDark = Color(0xFFE0922E)
     val text = Color(0xFF3B2412)
 }
 

@@ -78,7 +78,7 @@ fun DailyTab(onPlayDaily: (Long) -> Unit) {
             VSpace(6.dp)
             BodyText(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(now)), size = 14.sp, color = Candy.greyDark)
             VSpace(8.dp)
-            MiniBoard(level, theme, Modifier.fillMaxWidth().height(170.dp), paint = theme.paintFor(3).color())
+            MiniBoard(level, theme, Modifier.fillMaxWidth().height(170.dp), paint = theme.paintFor(3).color(), cardWood = true)
             VSpace(8.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GameIcon(Icon.FLAME, Candy.orange, size = 26.dp)
@@ -116,7 +116,7 @@ fun DailyTab(onPlayDaily: (Long) -> Unit) {
             if (ready) {
                 CandyButton("CLAIM ${GameStore.CALENDAR[next]}", Modifier.fillMaxWidth().scale(rememberPulse()), color = Candy.orange, dark = Candy.orangeDark, icon = Icon.GIFT) {
                     val got = store.claimCalendar()
-                    if (got > 0) { app.sound.coin(); claimedNow = got }
+                    if (got > 0) { app.sound.coin(); claimedNow = got; app.telemetry.earn("coins", got.toLong(), "calendar") }
                 }
             } else {
                 BodyText(claimedNow?.let { "+$it coins claimed! Come back tomorrow." } ?: "Come back in $hms for your next reward.", size = 14.sp, color = Candy.greyDark, align = TextAlign.Center)

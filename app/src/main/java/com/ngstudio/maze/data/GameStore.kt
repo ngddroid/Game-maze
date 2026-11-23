@@ -251,5 +251,6 @@ class GameStore(context: Context) {
 
     companion object {
         val CALENDAR = intArrayOf(20, 30, 40, 50, 75, 100, 200)
+
     }
 }

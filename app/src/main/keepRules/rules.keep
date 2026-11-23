@@ -10,3 +10,12 @@
 #-keepclassmembers class fqcn.of.javascript.interface.for.webview {
 #   public *;
 #}
+
+# Firebase finds its components by the class names listed in the manifest and creates each
+# ComponentRegistrar with its no-argument constructor through reflection. Firebase's own rule keeps
+# only the classes; R8 full mode (the AGP 9 default) can remove the constructors (for example of
+# CrashlyticsRegistrar), and the release build then crashes on launch with
+# "FirebaseCrashlytics component is not present". (Found in Ridge Riders.)
+-keep class * implements com.google.firebase.components.ComponentRegistrar {
+    public <init>();
+}

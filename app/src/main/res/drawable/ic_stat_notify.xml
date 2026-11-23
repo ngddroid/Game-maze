@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon for notifications: white silhouette of the app icon (ball + paint swoosh),
+     the same shapes as ic_launcher_monochrome, cropped to fill 24dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="70"
+    android:viewportHeight="70">
+    <group android:translateX="-16" android:translateY="-19">
+        <path
+            android:pathData="M27,80C33,60 46,60 59,54"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="13"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:pathData="M46,46a19,19 0 1,0 38,0a19,19 0 1,0 -38,0z" />
+    </group>
+</vector>

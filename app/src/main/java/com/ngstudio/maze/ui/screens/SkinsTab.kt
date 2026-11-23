@@ -153,14 +153,14 @@ fun SkinsTab() {
                 else -> {
                     CandyButton("${item.price}", Modifier.weight(1f), height = 50.dp, textSize = 20.sp, icon = Icon.COIN,
                         color = Pro.gold, dark = Pro.goldDark) {
-                        if (buy(item)) { app.sound.unlock(); equip(item) } else notEnough()
+                        if (buy(item)) { app.sound.unlock(); equip(item); app.telemetry.spend("${item.tab.name.lowercase()}_${item.id}", item.price) } else notEnough()
                     }
                     if (Ads.rewarded.available) CandyButton("WATCH AD", Modifier.weight(1f), height = 50.dp, textSize = 19.sp, icon = Icon.VIDEO,
                         color = Candy.pink, dark = Candy.pinkDark) { adFor = item }
                 }
             }
         }
-        if (noMoney) BodyText("Not enough coins - play levels to earn more!", Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp), color = Pro.cream, size = 14.sp)
+        if (noMoney) BodyText("Not enough coins - play levels to earn more!", Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp), color = WorldTheme.forLevel(store.currentLevel).ink.color(), size = 14.sp)
         VSpace(8.dp)
         Row(
             Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(20.dp)).background(Pro.glass, RoundedCornerShape(20.dp)).padding(4.dp),
@@ -198,6 +198,7 @@ fun SkinsTab() {
             }
             equip(i)
             app.sound.unlock()
+            app.telemetry.rewardedAd("skin")
             adFor = null
         }
     }

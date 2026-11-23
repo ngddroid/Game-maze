@@ -1,5 +1,37 @@
 package com.ngstudio.maze.ui.screens
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.ngstudio.maze.ui.components.tapFeedback
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.ngstudio.maze.ui.components.starPath
+import androidx.compose.animation.core.spring
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
+import com.ngstudio.maze.ui.components.WorldBadge
+import com.ngstudio.maze.ui.components.BottomLeaves
+import com.ngstudio.maze.ui.components.TopLeaves
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -128,8 +160,8 @@ private fun MovesPill(left: Int) {
     val pulse = rememberPulse(500, 0.08f)
     Row(
         Modifier.scale(if (low) pulse else 1f).height(34.dp).shadow(3.dp, RoundedCornerShape(17.dp))
-            .background(if (low) Candy.pinkDark else Pro.glass, RoundedCornerShape(17.dp))
-            .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(17.dp)).padding(horizontal = 12.dp),
+            .background(if (low) Brush.verticalGradient(listOf(Candy.pink, Candy.pinkDark)) else Brush.verticalGradient(listOf(Pro.chrome, Pro.chromeDark)), RoundedCornerShape(17.dp))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Pro.chromeLip.copy(alpha = 0.6f))), RoundedCornerShape(17.dp)).padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BodyText("MOVES", size = 11.sp, color = Pro.creamDim, shadow = false)
@@ -190,6 +222,9 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
     var adForHint by remember { mutableStateOf(false) }
     var undoTip by remember { mutableStateOf(false) }
     var adForMoves by remember { mutableStateOf(false) }
+    val telemetry = app.telemetry
+    var hintsThisTry by remember { mutableIntStateOf(0) }
+    val levelId = if (mode is PlayMode.Daily) mode.day.toInt() else levelNumber
     // The HUD coin counter lags behind the real balance so it can roll up when the flying coins land.
     val coinShown = remember { Animatable(store.coins.toFloat()) }
     var coinTarget by remember { mutableStateOf(Offset.Zero) }
@@ -225,7 +260,10 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
             override fun playSlide(slide: Slide) { renderer.playSlide(slide); swiped = true; lastMoveAt = System.currentTimeMillis(); nudge = false; undoTip = false }
             override fun playUndo(slide: Slide, unpaint: IntArray) { renderer.playUndo(slide, unpaint); sound.undo() }
             override fun onBlocked(dir: Dir) { sound.bonk(); haptics.light() }
-            override fun onOutOfMoves() { sound.bonk(); haptics.impact(0.6f) }
+            override fun onOutOfMoves() {
+                sound.bonk(); haptics.impact(0.6f)
+                telemetry.outOfMoves(levelId, isDaily, controllerHolder[0]?.tilesLeft ?: 0)
+            }
             override fun onWin(moves: Int, stars: Int) {
                 if (BuildConfig.DEBUG) android.util.Log.i("MazeQA", "WIN level=${if (isDaily) "daily" else levelNumber} moves=$moves par=${level.par} stars=$stars")
                 sound.win(); haptics.win()
@@ -233,6 +271,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
                 val reward = if (mode is PlayMode.Campaign) store.completeLevel(levelNumber, stars, level.floorCount, moves) else null
                 val daily = if (isDaily) store.completeDaily() else 0
                 win = WinInfo(stars, moves, level.par, reward, daily)
+                telemetry.levelComplete(levelId, isDaily, moves, level.par, stars, (reward?.coins ?: 0) + daily, reward?.firstClear ?: false, hintsThisTry)
             }
         }).also { controllerHolder[0] = it }
     }
@@ -240,6 +279,12 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
     // push scene whenever the level (or attempt) changes
     LaunchedEffect(level, attempt) {
         win = null; winVisible = false; introDone = false
+        hintsThisTry = 0
+        telemetry.levelStart(
+            levelId, isDaily, world = theme.index + 1, par = level.par,
+            moveLimit = if (mode is PlayMode.Daily) Difficulty.dailyMoveLimit(level.par) else Difficulty.moveLimit(levelNumber, level.par),
+            attempt = attempt,
+        )
         if (BuildConfig.DEBUG) android.util.Log.i("MazeQA", "START level=${if (isDaily) "daily" else levelNumber} par=${level.par} size=${level.width}x${level.height}")
         renderer.setScene(
             SceneConfig(
@@ -287,7 +332,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
     val topInset = WindowInsets.statusBars.getTop(density)
     val bottomInset = WindowInsets.navigationBars.getBottom(density)
     LaunchedEffect(topInset, bottomInset) {
-        with(density) { renderer.setSafeArea(topInset + 150.dp.toPx(), bottomInset + 118.dp.toPx()) }
+        with(density) { renderer.setSafeArea(topInset + 152.dp.toPx(), bottomInset + 108.dp.toPx()) }
     }
 
     val ctrl by rememberUpdatedState(controller)
@@ -316,13 +361,28 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
         val s = Physics.slide(level, c.position, d) ?: return
         undoTip = false
         store.useHint()
+        hintsThisTry++
+        telemetry.hintUsed(levelId, isDaily)
         sound.hint()
         renderer.showHint(s.cells, d)
         lastMoveAt = System.currentTimeMillis(); nudge = false
     }
 
+    /** Restart the level, logging the unfinished try. */
+    fun restart(reason: String) {
+        if (!ctrl.finished) telemetry.levelQuit(levelId, isDaily, reason, ctrl.moves, ctrl.progress)
+        attempt++
+    }
+    /** Leave for Home, logging the try if it was unfinished. */
+    fun quitHome() {
+        if (!ctrl.finished) telemetry.levelQuit(levelId, isDaily, "home", ctrl.moves, ctrl.progress)
+        onHome()
+    }
+
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { ctx -> GameGLView(ctx, renderer).also { glView[0] = it } }, modifier = Modifier.fillMaxSize())
+        TopLeaves()
+        BottomLeaves()
 
         // swipe input
         Box(
@@ -353,8 +413,11 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
                 RoundButton(Icon.PAUSE, size = 48.dp) { paused = true }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        EngravedText(if (isDaily) "DAILY" else "LEVEL $levelNumber", 36.sp, theme.ink.color())
-                        BodyText(if (isDaily) "Daily Challenge" else theme.name, size = 14.sp, color = theme.ink.color().copy(alpha = 0.8f), align = TextAlign.Center)
+                        EngravedText(if (isDaily) "DAILY" else "LEVEL $levelNumber", 34.sp, theme.ink.color())
+                        WorldBadge(
+                            if (isDaily) "DAILY CHALLENGE" else "WORLD ${WorldTheme.worldIndexOf(levelNumber) + 1}  •  ${theme.name.uppercase()}",
+                            theme.accentDark.color(), small = true,
+                        )
                     }
                 }
                 CounterPill(coinShown.value.toInt().toString(), Modifier.onGloballyPositioned { coinTarget = it.boundsInRoot().center }) { CoinIcon(size = 26.dp) }
@@ -380,36 +443,27 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
             }
         }
 
-        // ---- bottom buttons
+        // ---- bottom buttons (same wood tiles as the Home quick actions)
         Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 18.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(start = 18.dp, end = 18.dp, bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val undoPulse = rememberPulse(600, 0.12f)
-                RoundButton(Icon.UNDO, Modifier.scale(if (undoTip) undoPulse else 1f), size = 58.dp, iconColor = if (controller.canUndo) Pro.cream else Pro.cream.copy(alpha = 0.35f)) { undoTip = false; ctrl.undo() }
-                BodyText("Undo", size = 12.sp, color = theme.ink.color())
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                RoundButton(Icon.RESTART, size = 58.dp) { if (!ctrl.isBusy || ctrl.finished) attempt++ }
-                BodyText("Restart", size = 12.sp, color = theme.ink.color())
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                val pulse = rememberPulse(600, 0.12f)
-                RoundButton(Icon.HINT, Modifier.scale(if (nudge) pulse else 1f), size = 58.dp, color = Pro.gold, iconColor = Pro.text, dark = Pro.goldDark,
-                    badge = if (store.hints > 0) store.hints.toString() else "+", badgeColor = if (store.hints > 0) Candy.pink else Candy.mint) { useHint() }
-                BodyText("Hint", size = 12.sp, color = theme.ink.color())
-            }
+            val undoPulse = rememberPulse(600, 0.12f)
+            QuickTile("Undo", Icon.UNDO, Candy.sky, null, Modifier.weight(1f).scale(if (undoTip) undoPulse else 1f), enabled = controller.canUndo) { undoTip = false; ctrl.undo() }
+            QuickTile("Restart", Icon.RESTART, Candy.orange, null, Modifier.weight(1f)) { if (!ctrl.isBusy || ctrl.finished) restart("restart") }
+            val pulse = rememberPulse(600, 0.12f)
+            QuickTile("Hint", Icon.HINT, Pro.gold, if (store.hints > 0) store.hints.toString() else "+", Modifier.weight(1f).scale(if (nudge) pulse else 1f),
+                badgeColor = if (store.hints > 0) Candy.pink else Candy.mint) { useHint() }
         }
 
         if (undoTip) Box(
-            Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(bottom = 122.dp, start = 14.dp)
+            Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(bottom = 112.dp, start = 14.dp)
                 .shadow(6.dp, RoundedCornerShape(14.dp)).background(Pro.glass, RoundedCornerShape(14.dp))
                 .border(1.dp, Pro.gold.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
         ) { BodyText("Off the best route - undo a few moves", size = 14.sp, color = Pro.cream) }
 
         if (nudge) Box(
-            Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 122.dp, end = 14.dp)
+            Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(bottom = 112.dp, end = 14.dp)
                 .shadow(6.dp, RoundedCornerShape(14.dp)).background(Pro.glass, RoundedCornerShape(14.dp))
                 .border(1.dp, Pro.gold.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 8.dp),
         ) { BodyText("Stuck? Try a hint", size = 14.sp, color = Pro.cream) }
@@ -428,24 +482,27 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
 
         if (paused && win == null) PauseOverlay(
             store = store,
+            label = if (isDaily) "DAILY CHALLENGE" else "LEVEL $levelNumber  •  ${theme.name.uppercase()}",
+            progress = controller.progress, movesLeft = controller.movesLeft, par = level.par, tilesLeft = controller.tilesLeft,
+            paint = theme.paintFor(if (isDaily) 3 else levelNumber).color(),
             onResume = { paused = false },
-            onRestart = { paused = false; attempt++ },
-            onHome = onHome,
+            onRestart = { paused = false; restart("restart") },
+            onHome = { quitHome() },
         )
 
         if (controller.outOfMoves && win == null && !adForMoves) OutOfMoves(
             store = store, tilesLeft = controller.tilesLeft, canUndo = controller.canUndo,
             onUndo = { ctrl.undo() },
-            onBuy = { if (store.spend(MOVES_PRICE)) { sound.coin(); ctrl.addMoves(5) } },
+            onBuy = { if (store.spend(MOVES_PRICE)) { sound.coin(); ctrl.addMoves(5); telemetry.spend("moves_5", MOVES_PRICE) } },
             onAd = { adForMoves = true },
-            onRetry = { attempt++ },
+            onRetry = { restart("retry") },
         )
-        if (adForMoves) FakeAdOverlay { adForMoves = false; ctrl.addMoves(5); sound.unlock() }
+        if (adForMoves) FakeAdOverlay { adForMoves = false; ctrl.addMoves(5); sound.unlock(); telemetry.rewardedAd("moves_5") }
 
         if (showBuyHint) BuyHintDialog(store, onClose = { showBuyHint = false }, onAd = { showBuyHint = false; adForHint = true }) {
-            if (store.buyHint(HINT_PRICE)) { sound.coin(); showBuyHint = false; useHint() }
+            if (store.buyHint(HINT_PRICE)) { sound.coin(); showBuyHint = false; telemetry.spend("hint", HINT_PRICE); useHint() }
         }
-        if (adForHint) FakeAdOverlay { store.addHint(1); adForHint = false; sound.unlock(); useHint() }
+        if (adForHint) FakeAdOverlay { store.addHint(1); adForHint = false; sound.unlock(); telemetry.rewardedAd("hint"); useHint() }
 
         val w = win
         AnimatedVisibility(w != null && winVisible, enter = fadeIn(tween(200)), exit = fadeOut(tween(150))) {
@@ -546,36 +603,164 @@ private fun CoachMark(m: Mechanic, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun PauseOverlay(store: GameStore, onResume: () -> Unit, onRestart: () -> Unit, onHome: () -> Unit) {
-    Scrim(onDismiss = onResume) {
-        val pop = rememberPopIn()
-        Panel(Modifier.width(310.dp).scale(pop)) {
-            Ribbon("PAUSED")
-            VSpace(18.dp)
-            CandyButton("RESUME", Modifier.fillMaxWidth(), icon = Icon.PLAY) { onResume() }
-            VSpace(10.dp)
-            CandyButton("RESTART", Modifier.fillMaxWidth(), color = Candy.sky, dark = Candy.skyDark, icon = Icon.RESTART) { onRestart() }
-            VSpace(10.dp)
-            CandyButton("HOME", Modifier.fillMaxWidth(), color = Candy.pink, dark = Candy.pinkDark, icon = Icon.HOME) { onHome() }
-            VSpace(16.dp)
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ToggleRound(Icon.SOUND, store.sound) { store.toggleSound() }
-                ToggleRound(Icon.MUSIC, store.music) { store.toggleMusic(); MazeApp.instance.sound.refreshMusic() }
-                ToggleRound(Icon.VIBRATE, store.vibration) { store.toggleVibration() }
+private fun PauseOverlay(
+    store: GameStore, label: String, progress: Float, movesLeft: Int?, par: Int, tilesLeft: Int, paint: Color,
+    onResume: () -> Unit, onRestart: () -> Unit, onHome: () -> Unit,
+) {
+    // the card drops in from above and settles with a little swing; the plaque pops in on top
+    val scrim = remember { Animatable(0f) }
+    val drop = remember { Animatable(0f) }
+    val plaque = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        launch { scrim.animateTo(1f, tween(220)) }
+        launch { drop.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 260f)) }
+        delay(200)
+        plaque.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 420f))
+    }
+    Box(
+        Modifier.fillMaxSize()
+            .graphicsLayer { alpha = scrim.value }
+            .background(Color(0x992B160A))
+            .clickable(remember { MutableInteractionSource() }, null) { onResume() },
+        contentAlignment = Alignment.Center,
+    ) {
+        val d = drop.value
+        Box(
+            Modifier.padding(horizontal = 22.dp)
+                .graphicsLayer {
+                    translationY = (1f - d) * -420.dp.toPx()
+                    rotationZ = (1f - d) * 6f
+                    alpha = (d * 3f).coerceIn(0f, 1f)
+                },
+            contentAlignment = Alignment.TopCenter,
+        ) {
+            Panel(Modifier.fillMaxWidth().padding(top = 28.dp).clickable(remember { MutableInteractionSource() }, null) {}, padding = 18.dp) {
+                VSpace(30.dp)
+                Text(label, style = TextStyle(fontFamily = com.ngstudio.maze.ui.theme.Nunito, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp,
+                    letterSpacing = 1.5.sp, color = Color(0xFF8A5530)), textAlign = TextAlign.Center)
+                VSpace(12.dp)
+                // progress
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    BodyText("Painted", size = 14.sp, color = Color(0xFF8A5530), shadow = false)
+                    HSpace(6.dp)
+                    BodyText("${(progress * 100).toInt()}%", size = 18.sp, color = Color(0xFF5E2F14), shadow = false)
+                    Spacer(Modifier.weight(1f))
+                    BodyText(if (tilesLeft == 1) "1 tile left" else "$tilesLeft tiles left", size = 13.sp, color = Color(0xFF8A5530), shadow = false)
+                }
+                VSpace(6.dp)
+                PaintProgressBar(progress, paint, Modifier.fillMaxWidth(), height = 16.dp)
+                VSpace(10.dp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InfoChip("MOVES LEFT", movesLeft?.toString() ?: "∞", Modifier.weight(1f), warn = movesLeft != null && movesLeft <= 3)
+                    InfoChip("PAR", "$par", Modifier.weight(1f))
+                }
+                VSpace(16.dp)
+                // settings as wood tiles
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    WoodToggle(Icon.SOUND, "Sound", Candy.sky, store.sound, Modifier.weight(1f)) { store.toggleSound() }
+                    WoodToggle(Icon.MUSIC, "Music", Candy.orange, store.music, Modifier.weight(1f)) { store.toggleMusic(); MazeApp.instance.sound.refreshMusic() }
+                    WoodToggle(Icon.VIBRATE, "Vibrate", Candy.mint, store.vibration, Modifier.weight(1f)) { store.toggleVibration() }
+                }
+                VSpace(18.dp)
+                CandyButton("RESUME", Modifier.fillMaxWidth(), height = 62.dp, textSize = 30.sp, icon = Icon.PLAY) { onResume() }
+                VSpace(10.dp)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    WoodButton(Icon.RESTART, "Restart", Modifier.weight(1f)) { onRestart() }
+                    WoodButton(Icon.HOME, "Home", Modifier.weight(1f)) { onHome() }
+                }
+            }
+            // wood plaque with the title, sitting on the card's top edge
+            val pq = plaque.value
+            Row(
+                Modifier.graphicsLayer { val sc = 0.5f + 0.5f * pq; scaleX = sc; scaleY = sc; alpha = pq.coerceIn(0f, 1f) }
+                    .shadow(8.dp, RoundedCornerShape(18.dp), spotColor = Pro.chromeLip)
+                    .background(Brush.verticalGradient(listOf(Color(0xFFB5703A), Pro.chrome, Pro.chromeDark)), RoundedCornerShape(18.dp))
+                    .border(2.5.dp, Brush.verticalGradient(listOf(Pro.rimLight, Pro.rimDark)), RoundedCornerShape(18.dp))
+                    .padding(horizontal = 26.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GameIcon(Icon.PAUSE, Pro.cream, size = 24.dp)
+                HSpace(10.dp)
+                GameText("PAUSED", 32.sp, color = Pro.cream, outline = Pro.chromeLip, outlineWidth = 0.07f)
             }
         }
     }
 }
 
+/** Cream chip with a small label and a value (pause card). */
 @Composable
-fun ToggleRound(icon: Icon, on: Boolean, onClick: () -> Unit) {
-    Box {
-        RoundButton(icon, size = 52.dp, color = if (on) Candy.mint else Candy.grey, dark = if (on) Candy.mintDark else Candy.greyDark, iconColor = Color.White, onClick = onClick)
-        if (!on) Canvas(Modifier.size(58.dp)) {
-            drawLine(Color.White, Offset(size.width * 0.25f, size.height * 0.25f), Offset(size.width * 0.75f, size.height * 0.75f), 7f, androidx.compose.ui.graphics.StrokeCap.Round)
-        }
+private fun InfoChip(label: String, value: String, modifier: Modifier, warn: Boolean = false) {
+    Row(
+        modifier.background(if (warn) Color(0xFFFFE1DC) else Color(0xFFF3E3C6), RoundedCornerShape(14.dp))
+            .border(1.5.dp, if (warn) Candy.pink.copy(alpha = 0.6f) else Color(0xFFD9B98A), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(label, style = TextStyle(fontFamily = com.ngstudio.maze.ui.theme.Nunito, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp,
+            letterSpacing = 1.sp, color = Color(0xFF9A6B45)))
+        HSpace(8.dp)
+        BodyText(value, size = 18.sp, color = if (warn) Candy.pinkDark else Color(0xFF5E2F14), shadow = false)
     }
 }
+
+/** Wood tile toggle like the Home quick tiles: coloured icon disc when on, grey slashed disc when off. */
+@Composable
+private fun WoodToggle(icon: Icon, label: String, color: Color, on: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val k by androidx.compose.animation.core.animateFloatAsState(if (on) 1f else 0f, spring(dampingRatio = 0.6f, stiffness = 400f), label = "tog")
+    Column(
+        modifier.shadow(5.dp, RoundedCornerShape(18.dp))
+            .background(Brush.verticalGradient(listOf(Pro.chrome, Pro.chromeDark)), RoundedCornerShape(18.dp))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.32f), Pro.chromeLip.copy(alpha = 0.5f))), RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(18.dp))
+            .clickable { tapFeedback(); onClick() }
+            .semantics { contentDescription = "$label ${if (on) "on" else "off"}" }
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val c = lerp(Color(0xFF8C7A6B), color, k)
+        Box(Modifier.size(40.dp).background(Brush.verticalGradient(listOf(lerp(c, Color.White, 0.2f), c)), CircleShape), contentAlignment = Alignment.Center) {
+            GameIcon(icon, Color.White.copy(alpha = 0.55f + 0.45f * k), size = 22.dp)
+            if (k < 1f) Canvas(Modifier.size(28.dp).graphicsLayer { alpha = 1f - k }) {
+                drawLine(Color.White, Offset(size.width * 0.12f, size.height * 0.12f), Offset(size.width * 0.88f, size.height * 0.88f), 3.dp.toPx(), StrokeCap.Round)
+            }
+        }
+        VSpace(4.dp)
+        BodyText(label, size = 13.sp, color = Pro.cream, align = TextAlign.Center)
+        Text(if (on) "ON" else "OFF", style = TextStyle(fontFamily = com.ngstudio.maze.ui.theme.Nunito, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp,
+            letterSpacing = 1.5.sp, color = if (on) Color(0xFFFFD54A) else Pro.creamDim.copy(alpha = 0.6f)))
+    }
+}
+
+/** Secondary wood pill button with an icon and a label (pause card). */
+@Composable
+private fun WoodButton(icon: Icon, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier.height(50.dp).shadow(4.dp, RoundedCornerShape(25.dp))
+            .background(Brush.verticalGradient(listOf(Color(0xFFA9622F), Pro.chrome, Pro.chromeDark)), RoundedCornerShape(25.dp))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.35f), Pro.chromeLip.copy(alpha = 0.6f))), RoundedCornerShape(25.dp))
+            .clip(RoundedCornerShape(25.dp))
+            .clickable { tapFeedback(); onClick() },
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+    ) {
+        GameIcon(icon, Pro.cream, size = 22.dp)
+        HSpace(8.dp)
+        GameText(label, 20.sp, color = Pro.cream, outline = Pro.chromeLip, outlineWidth = 0.06f)
+    }
+}
+
+/** "LEVEL 23" between two fading gold rules (header of the dark result/pause cards). */
+@Composable
+private fun CardHeader(text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.weight(1f).height(1.5.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, Color(0xFFE8B45A)))))
+        HSpace(10.dp)
+        Text(text, style = TextStyle(fontFamily = com.ngstudio.maze.ui.theme.Nunito, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp,
+            letterSpacing = 2.5.sp, color = Color(0xFFFFE6B0)))
+        HSpace(10.dp)
+        Box(Modifier.weight(1f).height(1.5.dp).background(Brush.horizontalGradient(listOf(Color(0xFFE8B45A), Color.Transparent))))
+    }
+}
+
 
 @Composable
 private fun BuyHintDialog(store: GameStore, onClose: () -> Unit, onAd: () -> Unit, onBuy: () -> Unit) {
@@ -614,89 +799,370 @@ private fun LevelComplete(
     var doubled by remember { mutableStateOf(false) }
     var adPlaying by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // staged entrance: backdrop -> title -> stars one by one -> info -> bottom panel
+    val backdrop = remember { Animatable(0f) }
+    val starAnims = remember { List(3) { Animatable(0f) } }
+    val bursts = remember { List(3) { Animatable(0f) } }
+    val details = remember { Animatable(0f) }
+    val panel = remember { Animatable(0f) }
+    val coinPop = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
-        for (i in 1..info.stars) { delay(if (i == 1) 380 else 260); sound.star(i) }
-        delay(250)
-        if (coinsTotal > 0) {
-            sound.coin(); coinAnim.animateTo(coinsTotal.toFloat(), tween(600))
-            onCoinsFrom(coinPos); coinsLanded = true
+        launch { backdrop.animateTo(1f, tween(350)) }
+        delay(120)
+        delay(280)
+        for (i in 0 until 3) {
+            if (i < info.stars) {
+                launch { starAnims[i].animateTo(1f, spring(dampingRatio = 0.40f, stiffness = 480f)) }
+                delay(150)
+                sound.star(i + 1)
+                launch { bursts[i].animateTo(1f, tween(700, easing = FastOutSlowInEasing)) }
+                delay(170)
+            } else {
+                launch { starAnims[i].animateTo(1f, tween(260)) }
+                delay(120)
+            }
         }
-        if ((info.reward?.chest ?: 0) > 0) { delay(200); sound.chest() }
+        launch { details.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) }
+        launch { panel.animateTo(1f, spring(dampingRatio = 0.75f, stiffness = 260f)) }
+        delay(380)
+        if (coinsTotal > 0) {
+            sound.coin(); coinAnim.animateTo(coinsTotal.toFloat(), tween(650, easing = FastOutSlowInEasing))
+            onCoinsFrom(coinPos); coinsLanded = true
+            coinPop.snapTo(1f); coinPop.animateTo(0f, spring(dampingRatio = 0.35f, stiffness = 500f))
+        }
+        if ((info.reward?.chest ?: 0) > 0) { delay(150); sound.chest() }
     }
-    Scrim(alpha = 0.45f) {
-        val pop = rememberPopIn()
-        Column(Modifier.padding(horizontal = 22.dp).scale(pop), horizontalAlignment = Alignment.CenterHorizontally) {
-            val title = when (info.stars) { 3 -> "PERFECT!"; 2 -> "GREAT!"; else -> "NICE!" }
-            GameText(title, 54.sp, color = Candy.lemon, outline = Candy.pinkDark)
-            VSpace(4.dp)
-            Panel(Modifier.fillMaxWidth()) {
-                GameText(if (isDaily) "DAILY DONE" else "LEVEL $levelNumber", 26.sp, color = Candy.pink, outline = Color.White, outlineWidth = 0.04f)
+
+    val title = when (info.stars) { 3 -> "PERFECT!"; 2 -> "GREAT!"; else -> "NICE!" }
+    Box(
+        Modifier.fillMaxSize()
+            .graphicsLayer { alpha = backdrop.value }
+            .background(Brush.radialGradient(listOf(Color(0xCC1E130B), Color(0xF20C0805)), radius = 1500f))
+            // fade the game HUD (top bar, bottom tiles) out of view behind the title and buttons
+            .background(Brush.verticalGradient(0f to Color(0xF2120802), 0.12f to Color(0xC8120802), 0.24f to Color.Transparent, 0.62f to Color.Transparent, 0.80f to Color(0xF5120802), 1f to Color(0xFF120802)))
+            .clickable(remember { MutableInteractionSource() }, null) {},
+    ) {
+        Column(Modifier.fillMaxSize().statusBarsPadding(), horizontalAlignment = Alignment.CenterHorizontally) {
+            // ---- celebration (centre of the screen)
+            Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                BouncyTitle(title, TitleColors.forStars(info.stars))
+                VSpace(2.dp)
+                FloatingStars(info.stars, starAnims.map { it.value }, bursts.map { it.value })
                 VSpace(10.dp)
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
-                    for (i in 1..3) {
-                        val p = rememberPopIn(380 + (i - 1) * 260)
-                        val lit = i <= info.stars
-                        StarIcon(lit && p > 0.05f, size = if (i == 2) 76.dp else 60.dp,
-                            modifier = Modifier.padding(horizontal = 4.dp).padding(bottom = if (i == 2) 14.dp else 0.dp)
-                                .scale(if (lit) p.coerceAtLeast(0.01f) else 1f).rotate(if (lit) (1f - p) * -40f else 0f))
-                    }
-                }
-                VSpace(8.dp)
-                BodyText("Moves ${info.moves}  ·  Par ${info.par}", size = 14.sp, color = Candy.greyDark)
-                VSpace(12.dp)
-                if (coinsTotal > 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.onGloballyPositioned { coinPos = it.boundsInRoot().center }) {
-                        CoinIcon(size = 34.dp)
-                        HSpace(8.dp)
-                        GameText("+${coinAnim.value.toInt()}", 34.sp, color = Candy.gold, outline = Candy.goldDark)
-                    }
-                }
-                val streakBonus = info.reward?.streakBonus ?: 0
-                if (streakBonus > 0) {
-                    VSpace(6.dp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        StarIcon(true, size = 22.dp)
-                        HSpace(6.dp)
-                        BodyText("Perfect streak x${info.reward?.streak}:  +$streakBonus coins", size = 14.sp, color = Candy.mintDark)
-                    }
-                }
-                val chest = info.reward?.chest ?: 0
-                if (chest > 0) {
-                    VSpace(6.dp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        GameIcon(Icon.CHEST, Candy.orange, size = 26.dp)
-                        HSpace(6.dp)
-                        BodyText("Chapter chest: +$chest coins  +1 hint", size = 14.sp, color = Candy.orangeDark)
-                    }
-                }
-                if (isDaily) {
-                    VSpace(6.dp)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        GameIcon(Icon.FLAME, Candy.orange, size = 24.dp)
-                        HSpace(6.dp)
-                        BodyText("Daily streak: ${MazeApp.instance.store.dailyStreak}", size = 15.sp, color = Candy.orangeDark)
-                    }
-                }
-                if (Ads.rewarded.available && coinsLanded && !doubled && coinsTotal > 0) {
+                val dv = details.value
+                val atPar = info.moves <= info.par
+                // ---- results card
+                Column(
+                    Modifier.fillMaxWidth().padding(horizontal = 28.dp)
+                        .graphicsLayer { alpha = dv; translationY = (1f - dv) * 24.dp.toPx(); val sc = 0.94f + 0.06f * dv; scaleX = sc; scaleY = sc }
+                        .shadow(12.dp, RoundedCornerShape(24.dp), spotColor = Color.Black)
+                        .background(Brush.verticalGradient(listOf(Color(0xF23A1D0B), Color(0xF2241006))), RoundedCornerShape(24.dp))
+                        .border(1.5.dp, Brush.verticalGradient(listOf(Color(0xFFFFE08A), Color(0x99D08A2A), Color(0x55D08A2A))), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    CardHeader(if (isDaily) "DAILY COMPLETE" else "LEVEL $levelNumber COMPLETE")
                     VSpace(12.dp)
-                    CandyButton("x2 COINS", Modifier.fillMaxWidth(), height = 52.dp, textSize = 22.sp, color = Candy.pink, dark = Candy.pinkDark, icon = Icon.VIDEO) { adPlaying = true }
+                    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+                        StatCell("MOVES", Modifier.weight(1f), icon = { GameIcon(Icon.PLAY, Color(0xFFFFE6B0).copy(alpha = 0.8f), size = 16.dp) }) {
+                            GameText("${info.moves}", 30.sp, color = if (atPar) Color(0xFFA5EB7E) else Color(0xFFFFF4E0), outline = Color(0xFF1A0A02), outlineWidth = 0.06f)
+                        }
+                        StatDivider()
+                        StatCell("PAR", Modifier.weight(1f), icon = { GameIcon(Icon.TROPHY, Color(0xFFFFE6B0).copy(alpha = 0.8f), size = 16.dp) }) {
+                            GameText("${info.par}", 30.sp, color = Color(0xFFFFF4E0), outline = Color(0xFF1A0A02), outlineWidth = 0.06f)
+                        }
+                        if (coinsTotal > 0) {
+                            StatDivider()
+                            val cp = coinPop.value
+                            StatCell("COINS", Modifier.weight(1.25f).onGloballyPositioned { coinPos = it.boundsInRoot().center }, icon = null) {
+                                Row(Modifier.graphicsLayer { val sc = 1f + 0.22f * cp; scaleX = sc; scaleY = sc }, verticalAlignment = Alignment.CenterVertically) {
+                                    // the coin spins while the amount counts up
+                                    val spinK = coinAnim.value / coinsTotal
+                                    CoinIcon(size = 30.dp, modifier = Modifier.graphicsLayer { rotationY = if (coinsLanded) 0f else spinK * 720f; cameraDistance = 12f * density })
+                                    HSpace(6.dp)
+                                    GameText("+${coinAnim.value.toInt()}", 30.sp, color = Color(0xFFFFD54A), outline = Color(0xFF1A0A02), outlineWidth = 0.06f)
+                                }
+                            }
+                        }
+                    }
+                    val streakBonus = info.reward?.streakBonus ?: 0
+                    val chest = info.reward?.chest ?: 0
+                    if (streakBonus > 0 || chest > 0 || isDaily) {
+                        VSpace(12.dp)
+                        Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0x33FFE6B0)))
+                        VSpace(10.dp)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (streakBonus > 0) BonusLine({ StarIcon(true, size = 18.dp) }, "Perfect streak x${info.reward?.streak}", "+$streakBonus", Color(0xFFA5EB7E))
+                            if (chest > 0) BonusLine({ GameIcon(Icon.CHEST, Candy.orange, size = 20.dp) }, "Chapter chest  (+1 hint)", "+$chest", Color(0xFFFFD54A))
+                            if (isDaily) BonusLine({ GameIcon(Icon.FLAME, Candy.orange, size = 20.dp) }, "Daily streak", "${store.dailyStreak}", Color(0xFFFFB066))
+                        }
+                    }
                 }
-                VSpace(16.dp)
-                CandyButton(if (isDaily) "HOME" else "NEXT", Modifier.fillMaxWidth(), height = 66.dp, textSize = 30.sp, icon = if (isDaily) Icon.HOME else Icon.NEXT) { onNext() }
-                VSpace(10.dp)
-                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    RoundButton(Icon.RESTART, size = 50.dp) { onReplay() }
-                    RoundButton(Icon.HOME, size = 50.dp) { onHome() }
+            }
+
+            // ---- actions float over the dimmed board (no panel)
+            val pv = panel.value
+            Column(
+                Modifier.fillMaxWidth()
+                    .graphicsLayer { translationY = (1f - pv) * 120.dp.toPx(); alpha = pv.coerceIn(0f, 1f) }
+                    .navigationBarsPadding()
+                    .padding(start = 32.dp, end = 32.dp, bottom = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (Ads.rewarded.available && coinsTotal > 0 && !doubled) {
+                    CandyButton("x2 COINS", Modifier.fillMaxWidth().graphicsLayer { alpha = if (coinsLanded) 1f else 0.5f },
+                        height = 52.dp, textSize = 22.sp, color = Candy.orange, dark = Candy.orangeDark, icon = Icon.VIDEO, enabled = coinsLanded) { adPlaying = true }
+                    VSpace(14.dp)
+                }
+                CandyButton(if (isDaily) "HOME" else "NEXT", Modifier.fillMaxWidth().scale(if (pv > 0.99f) rememberPulse(900, 0.03f) else 1f),
+                    height = 66.dp, textSize = 32.sp, icon = if (isDaily) Icon.HOME else Icon.NEXT) { onNext() }
+                VSpace(18.dp)
+                Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                    GlassRound(Icon.RESTART, "Replay") { onReplay() }
+                    GlassRound(Icon.HOME, "Home") { onHome() }
                 }
             }
         }
     }
     if (adPlaying) FakeAdOverlay {
         store.addCoins(coinsTotal)
+        MazeApp.instance.telemetry.rewardedAd("x2_coins")
+        MazeApp.instance.telemetry.earn("coins", coinsTotal.toLong(), "ad_x2")
         doubled = true
         adPlaying = false
         scope.launch { coinAnim.animateTo(coinsTotal * 2f, tween(600)) }
         onCoinsFrom(coinPos)
     }
 }
+
+/** Fill gradient (top, middle, bottom) and outline for a [BouncyTitle]. */
+private class TitleColors(val top: Color, val mid: Color, val bottom: Color, val outline: Color) {
+    companion object {
+        val GOLD = TitleColors(Color(0xFFFFF6C2), Color(0xFFFFD54A), Color(0xFFFF9F1C), Color(0xFF3E1A08))
+        /** 3 stars: cream with a teak outline. */
+        val CREAM = TitleColors(Color(0xFFFFFFFF), Color(0xFFFFF1DC), Color(0xFFF3CFA2), Color(0xFF6B3412))
+        /** 2 stars: lime green, like the NEXT button. */
+        val GREEN = TitleColors(Color(0xFFE9FFC4), Color(0xFF8FE04F), Color(0xFF3FAE2A), Color(0xFF1F5410))
+        /** 1 star: ice blue. */
+        val BLUE = TitleColors(Color(0xFFFFFFFF), Color(0xFFD9F1FF), Color(0xFF7CC6F0), Color(0xFF173F66))
+        fun forStars(stars: Int) = when (stars) { 3 -> CREAM; 2 -> GREEN; else -> BLUE }
+    }
+}
+
+/** Title whose letters drop in one by one and bounce, filled with a gold gradient; a glint runs across it now and then. */
+@Composable
+private fun BouncyTitle(text: String, colors: TitleColors = TitleColors.GOLD) {
+    val letters = remember(text) { text.toList() }
+    val anims = remember(text) { letters.map { Animatable(0f) } }
+    LaunchedEffect(text) {
+        delay(120)
+        anims.forEachIndexed { i, a ->
+            launch { delay(i * 55L); a.animateTo(1f, spring(dampingRatio = 0.42f, stiffness = 420f)) }
+        }
+    }
+    val glint by rememberInfiniteTransition(label = "glint").animateFloat(0f, 1f, infiniteRepeatable(tween(2800, easing = LinearEasing)), label = "g")
+    val n = letters.size
+    Row(verticalAlignment = Alignment.Bottom) {
+        letters.forEachIndexed { i, ch ->
+            val p = anims[i].value
+            // glint: a bright band sweeps across the letters in the first 40% of every cycle
+            val x = glint / 0.4f * (n + 4) - i - 2f
+            val g = if (glint < 0.4f) kotlin.math.exp(-x * x * 0.6f) else 0f
+            val top = lerp(colors.top, Color.White, g)
+            val mid = lerp(colors.mid, Color.White, g * 0.75f)
+            val bot = lerp(colors.bottom, Color.White, g * 0.5f)
+            val base = TextStyle(fontFamily = com.ngstudio.maze.ui.theme.Lilita, fontSize = 64.sp, letterSpacing = 0.5.sp)
+            Box(
+                Modifier.graphicsLayer {
+                    alpha = (p * 4f).coerceIn(0f, 1f)
+                    translationY = (1f - p) * -90.dp.toPx()
+                    val sc = 1f + (1f - p) * 0.6f
+                    scaleX = sc; scaleY = sc
+                    rotationZ = (1f - p) * (if (i % 2 == 0) -18f else 18f)
+                },
+            ) {
+                Text(ch.toString(), style = base.copy(color = colors.outline, drawStyle = Stroke(width = 15f, join = StrokeJoin.Round),
+                    shadow = Shadow(Color.Black.copy(alpha = 0.45f), Offset(0f, 9f), 6f)))
+                Text(ch.toString(), style = base.copy(brush = Brush.verticalGradient(listOf(top, mid, bot))))
+            }
+        }
+    }
+}
+
+/** A big glossy star: gold gradient, thick warm outline, inner bevel, gloss and a passing glint. */
+@Composable
+private fun GloryStar(size: Dp, glint: Float, modifier: Modifier = Modifier) {
+    Canvas(modifier.size(size)) {
+        val sc = this.size.minDimension / 24f
+        scale(sc, sc, pivot = Offset.Zero) {
+            val outer = starPath(12f, 12.9f, 11.2f, 5.3f)
+            val inner = starPath(12f, 13.1f, 8.6f, 4.0f)
+            translate(0f, 1.0f) { drawPath(outer, Color(0xFF3E1A08).copy(alpha = 0.45f)) }
+            drawPath(outer, Brush.verticalGradient(listOf(Color(0xFFFFB627), Color(0xFFE07B00)), 1.5f, 23f))
+            drawPath(outer, Color(0xFF8A3E00), style = Stroke(1.1f, join = StrokeJoin.Round))
+            drawPath(inner, Brush.verticalGradient(listOf(Color(0xFFFFF7C4), Color(0xFFFFDD55), Color(0xFFFFB31A)), 3f, 21f))
+            clipPath(inner) {
+                // gloss on the upper-left
+                drawOval(Color.White.copy(alpha = 0.55f), Offset(5.5f, 4.5f), Size(8f, 4.2f))
+                // diagonal glint band
+                if (glint in 0f..1f) {
+                    val gx = -10f + glint * 40f
+                    val path = Path().apply { moveTo(gx, 0f); lineTo(gx + 4f, 0f); lineTo(gx - 6f, 24f); lineTo(gx - 10f, 24f); close() }
+                    drawPath(path, Color.White.copy(alpha = 0.65f))
+                }
+            }
+            drawCircle(Color.White.copy(alpha = 0.9f), 0.9f, Offset(8.6f, 7.4f))
+        }
+    }
+}
+
+/** Big stars floating over the dimmed board in a gentle arc, with soft turning rays, halos and twinkles. */
+@Composable
+private fun FloatingStars(stars: Int, pops: List<Float>, bursts: List<Float>) {
+    val inf = rememberInfiniteTransition(label = "stars")
+    val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(24000, easing = LinearEasing)), label = "spin")
+    val bob by inf.animateFloat(-1f, 1f, infiniteRepeatable(tween(1700, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "b")
+    val clock by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(3000, easing = LinearEasing)), label = "clock")
+    val lit0 = pops.take(stars).maxOrNull() ?: 0f
+    Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+        if (stars > 0) Canvas(Modifier.fillMaxSize().graphicsLayer { alpha = lit0.coerceIn(0f, 1f) }) {
+            val c = center + Offset(0f, -8.dp.toPx())
+            val rr = size.width * 0.70f
+            fun rays(n: Int, width: Float, a: Float, angle: Float) = rotate(angle, c) {
+                for (i in 0 until n) {
+                    val a0 = i * 360f / n
+                    val t0 = Math.toRadians(a0.toDouble()); val t1 = Math.toRadians((a0 + width).toDouble())
+                    val path = Path().apply {
+                        moveTo(c.x, c.y)
+                        lineTo(c.x + rr * kotlin.math.cos(t0).toFloat(), c.y + rr * kotlin.math.sin(t0).toFloat())
+                        lineTo(c.x + rr * kotlin.math.cos(t1).toFloat(), c.y + rr * kotlin.math.sin(t1).toFloat())
+                        close()
+                    }
+                    drawPath(path, Brush.radialGradient(listOf(Color(0xFFFFF4DC).copy(alpha = a), Color.Transparent), c, rr * 0.85f))
+                }
+            }
+            rays(12, 11f, 0.10f, spin)
+            rays(12, 5f, 0.06f, -spin * 0.6f + 15f)
+            drawCircle(Brush.radialGradient(listOf(Color(0xFFFFF4DC).copy(alpha = 0.20f), Color(0xFFFFE2A8).copy(alpha = 0.05f), Color.Transparent), c, size.height * 0.50f), size.height * 0.50f, c)
+            // twinkles: small four-point sparkles that blink at fixed spots around the stars
+            for (k in 0 until 14) {
+                val h1 = ((k * 73 + 11) % 97) / 97f; val h2 = ((k * 41 + 29) % 89) / 89f
+                val pos = Offset(size.width * (0.06f + 0.88f * h1), size.height * (0.06f + 0.88f * h2))
+                val ph = (clock + k * 0.137f) % 1f
+                val a = kotlin.math.sin(ph * Math.PI.toFloat()).let { it * it * it }
+                val l = (5f + 6f * h2) * density * (0.6f + 0.4f * a)
+                drawLine(Color.White.copy(alpha = a * 0.9f), pos - Offset(l, 0f), pos + Offset(l, 0f), strokeWidth = 2.2f * density, cap = StrokeCap.Round)
+                drawLine(Color.White.copy(alpha = a * 0.9f), pos - Offset(0f, l), pos + Offset(0f, l), strokeWidth = 2.2f * density, cap = StrokeCap.Round)
+                drawCircle(Color.White.copy(alpha = a * 0.45f), l * 0.30f, pos)
+            }
+        }
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.Center) {
+            for (i in 0 until 3) {
+                val big = i == 1
+                val sz = if (big) 132.dp else 98.dp
+                val tilt = when (i) { 0 -> -16f; 2 -> 16f; else -> 0f }
+                val breathe = if (big && i < stars) 1f + 0.035f * bob else 1f
+                Box(
+                    Modifier.padding(horizontal = if (big) 0.dp else 0.dp).padding(top = if (big) 0.dp else 48.dp).size(sz)
+                        .graphicsLayer {
+                            rotationZ = tilt
+                            translationY = bob * (if (big) 3.dp else 2.dp).toPx() * (if (big) 1f else -1f)
+                            scaleX = breathe; scaleY = breathe
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val lit = i < stars
+                    val p = pops[i]
+                    // empty slot: a dark star with a faint gold edge
+                    if (!lit) Canvas(Modifier.matchParentSize().graphicsLayer { alpha = p.coerceIn(0f, 1f) }) {
+                        val sc = size.minDimension / 24f
+                        scale(sc, sc, pivot = Offset.Zero) {
+                            val path = starPath(12f, 12.9f, 11.2f, 5.3f)
+                            drawPath(path, Color(0xFF1C0D04).copy(alpha = 0.72f))
+                            drawPath(path, Color(0xFFFFD54A).copy(alpha = 0.30f), style = Stroke(0.6f, join = StrokeJoin.Round))
+                        }
+                    }
+                    if (lit) {
+                        // halo under the star
+                        Canvas(Modifier.size(sz * 1.5f).graphicsLayer { alpha = (p * 1.5f).coerceIn(0f, 1f) }) {
+                            drawCircle(Brush.radialGradient(listOf(Color(0xFFFFF4DC).copy(alpha = 0.22f), Color.Transparent), center, size.minDimension / 2.4f), size.minDimension / 2.4f)
+                        }
+                        val b = bursts[i]
+                        if (b > 0f && b < 1f) Canvas(Modifier.size(sz * 2.4f)) {
+                            val c = center
+                            for (k in 0 until 14) {
+                                val t = Math.toRadians((k * (360f / 14) + i * 13f).toDouble())
+                                val d = size.minDimension * (0.14f + 0.38f * b) * (if (k % 3 == 0) 1.15f else 1f)
+                                val pos = c + Offset(kotlin.math.cos(t).toFloat() * d, kotlin.math.sin(t).toFloat() * d)
+                                val a = 1f - b
+                                if (k % 2 == 0) drawCircle(Color(0xFFFFF1A8).copy(alpha = a), size.minDimension * 0.024f * (1f - b * 0.5f), pos)
+                                else {
+                                    val l = size.minDimension * 0.06f * (1f - b * 0.4f)
+                                    drawLine(Color.White.copy(alpha = a), pos - Offset(l, 0f), pos + Offset(l, 0f), strokeWidth = 4f, cap = StrokeCap.Round)
+                                    drawLine(Color.White.copy(alpha = a), pos - Offset(0f, l), pos + Offset(0f, l), strokeWidth = 4f, cap = StrokeCap.Round)
+                                }
+                            }
+                            drawCircle(Color.White.copy(alpha = 0.6f * (1f - b)), size.minDimension * 0.46f * b, c, style = Stroke(6f * (1f - b) + 1f))
+                        }
+                        // each star glints in turn
+                        val g = ((clock - i * 0.12f + 1f) % 1f) / 0.30f
+                        GloryStar(sz, if (p > 0.98f) g else -1f, Modifier.graphicsLayer {
+                            val s0 = 2.6f - 1.6f * p
+                            scaleX = s0; scaleY = s0
+                            alpha = (p * 3f).coerceIn(0f, 1f)
+                            rotationZ = (1f - p) * -70f
+                        })
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One column of the results card: small label with an icon above a big value. */
+@Composable
+private fun StatCell(label: String, modifier: Modifier, icon: (@Composable () -> Unit)?, value: @Composable () -> Unit) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) { icon(); HSpace(4.dp) }
+            Text(label, style = TextStyle(fontFamily = com.ngstudio.maze.ui.theme.Nunito, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp,
+                letterSpacing = 1.5.sp, color = Color(0xFFFFE6B0).copy(alpha = 0.65f)))
+        }
+        VSpace(2.dp)
+        value()
+    }
+}
+
+@Composable
+private fun StatDivider() = Box(Modifier.fillMaxHeight().padding(vertical = 4.dp).width(1.dp)
+    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x66FFE6B0), Color.Transparent))))
+
+/** A bonus line in the card footer: icon, text, and the amount on the right. */
+@Composable
+private fun BonusLine(icon: @Composable () -> Unit, text: String, amount: String, color: Color) {
+    Row(Modifier.fillMaxWidth().background(Color(0x22FFE6B0), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        icon(); HSpace(8.dp)
+        BodyText(text, Modifier.weight(1f), size = 14.sp, color = Color(0xFFFFF4E0), shadow = false)
+        BodyText(amount, size = 15.sp, color = color, shadow = false)
+    }
+}
+
+/** Small round glass button with a label, for secondary actions over the dimmed board. */
+@Composable
+private fun GlassRound(icon: Icon, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier.size(54.dp).clip(CircleShape)
+                .background(Brush.verticalGradient(listOf(Color(0x40FFFFFF), Color(0x1AFFFFFF))))
+                .border(1.5.dp, Pro.cream.copy(alpha = 0.45f), CircleShape)
+                .clickable { tapFeedback(); onClick() }
+                .semantics { contentDescription = label },
+            contentAlignment = Alignment.Center,
+        ) { GameIcon(icon, Pro.cream, size = 26.dp) }
+        VSpace(4.dp)
+        BodyText(label, size = 12.sp, color = Pro.creamDim, shadow = false)
+    }
+}
+
 

@@ -2,4 +2,6 @@
 <resources>
     <!-- Deep teak: system splash and window background (matches the Golden Teak world). -->
     <color name="splash_bg">#4A2410</color>
+    <!-- Notification accent (status-bar icon tint): the warm orange of the game's paint. -->
+    <color name="notify_accent">#FFE8892B</color>
 </resources>

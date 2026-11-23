@@ -106,6 +106,7 @@ fun WatchAdDialog(level: Int, onClose: () -> Unit, onPlay: (Int) -> Unit) {
     if (playingAd) FakeAdOverlay {
         playingAd = false
         store.unlockSingle(level)
+        MazeApp.instance.telemetry.rewardedAd("unlock_level")
         MazeApp.instance.sound.unlock()
         unlocked = true
     }

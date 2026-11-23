@@ -19,8 +19,12 @@ object Material {
     const val STONE = 5
     /** Varnished planks laid horizontally (world 1). */
     const val PLANKS = 6
-    /** Teak/walnut veneer, grain top to bottom (world 1). */
+    /** Teak/walnut veneer, grain top to bottom (old world 1, unused). */
     const val VENEER = 7
+    /** Honey oak, straight grain top to bottom with cathedral flames (unused). */
+    const val OAK = 8
+    /** Pale golden maple with wide wavy grain (world 1). */
+    const val MAPLE = 9
 }
 
 /**
@@ -49,8 +53,8 @@ class WorldTheme(
         private fun c(h: Int) = Rgb(h)
 
         val ALL: List<WorldTheme> = listOf(
-            WorldTheme(0, "Golden Teak", Material.VENEER, c(0xD3904F), c(0x93501F), c(0x381705), c(0x2B160A), c(0x1B0D05),
-                listOf(c(0xFFE14D), c(0x46E0A3), c(0x5CC8FF), c(0xFF7FA8), c(0xB48CFF)), c(0x43B25D), c(0x2C7F40), c(0xFFF4E0)),
+            WorldTheme(0, "Golden Teak", Material.MAPLE, c(0xF4D3A3), c(0xE5B67C), c(0xB97B42), c(0x2B160A), c(0x1B0D05),
+                listOf(c(0xFFE14D), c(0x46E0A3), c(0x5CC8FF), c(0xFF7FA8), c(0xB48CFF)), c(0x43B25D), c(0x2C7F40), c(0x5A2D12)),
             WorldTheme(1, "Marble Hall", Material.MARBLE, c(0xF5F3EF), c(0xE2DDD5), c(0xA39C93), c(0x3E4652), c(0x2B323B),
                 listOf(c(0xFF5C8A), c(0xFFC93C), c(0x2EC4B6), c(0x4D7CFF), c(0xFF8A3D)), c(0x4D7CFF), c(0x2F55C4), c(0x3E4652)),
             WorldTheme(2, "Pastel Clay", Material.CLAY, c(0xF9CBDB), c(0xEDAFC6), c(0xE296B4), c(0x5B3C8C), c(0x43286D),

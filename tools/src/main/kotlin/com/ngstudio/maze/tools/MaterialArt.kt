@@ -20,7 +20,7 @@ object MaterialArt {
     private class World(val mat: Int, val a: Int, val b: Int, val c: Int)
 
     private val worlds = listOf(
-        World(7, 0xD3904F, 0x93501F, 0x381705),
+        World(9, 0xF4D3A3, 0xE5B67C, 0xB97B42),
         World(1, 0xF5F3EF, 0xE2DDD5, 0xA39C93),
         World(2, 0xF9CBDB, 0xEDAFC6, 0xE296B4),
         World(0, 0x8E5E3D, 0x6B4128, 0x4A2A18),
@@ -57,6 +57,8 @@ object MaterialArt {
     private fun surface(w: World, sx: Double, sy: Double, sw: Double, sh: Double): DoubleArray {
         if (w.mat == 6) return planks(w, sx, sy, sw, sh)
         if (w.mat == 7) return veneer(w, sx, sy, sw, sh)
+        if (w.mat == 8) return grain(HONEY_OAK, sx, sy, sw, sh)
+        if (w.mat == 9) return grain(LIGHT_MAPLE, sx, sy, sw, sh)
         val px = sx / (sw / 2.4); val py = sy / (sw / 2.4)
         val A = rgb(w.a); val B = rgb(w.b); val C = rgb(w.c)
         var c: DoubleArray
@@ -267,6 +269,173 @@ object MaterialArt {
         return DoubleArray(3) { c[it] * vig }
     }
 
+    /**
+     * Straight-grain hardwood, grain running top to bottom. Calmer than [veneer]: no knots, soft streaks,
+     * optional quarter-sawn ray flecks (oak) and ribbon stripe (mahogany).
+     */
+    class Grain(
+        val light: Int, val mid: Int, val dark: Int,
+        val streaks: Double = 0.6, val lines: Double = 0.35, val density: Double = 11.0,
+        val wave: Double = 1.0, val rays: Double = 0.0, val ribbon: Double = 0.0, val pores: Double = 0.3,
+        val cathedral: Double = 0.0,
+    )
+
+    /** Warm honey oak (world 1 before the maple redesign, unused) with soft streaks and a few cathedral flames. */
+    private val HONEY_OAK = Grain(0xE0AE6C, 0xBF8545, 0x6B4019, streaks = 0.7, lines = 0.40, density = 9.0, wave = 0.7, cathedral = 0.55, pores = 0.35)
+
+    /** World 1 (current): pale illustrated maple, wide soft wavy grain, low contrast so cards and text read. */
+    private val LIGHT_MAPLE = Grain(0xF4D3A3, 0xE5B67C, 0xB97B42, streaks = 0.55, lines = 0.42, density = 4.0, wave = 2.3, cathedral = 0.40, pores = 0.0)
+
+    /** Rich polished teak for the level preview tile on cream cards (board_wood.jpg). */
+    private val CARD_TEAK = Grain(0xE8994A, 0xC46F2C, 0x6A300E, streaks = 1.0, lines = 0.55, density = 5.5, wave = 1.1, cathedral = 0.55, pores = 0.35)
+
+    fun grain(g: Grain, x: Double, y: Double, sw: Double, sh: Double): DoubleArray {
+        val px = x / sw * 4.0
+        val py = y / sw * 4.0
+        val warp = ((fbm(px * 0.35, py * 0.05) - 0.5) * 1.5 + (fbm(px * 1.3 + 7.0, py * 0.16) - 0.5) * 0.35) * g.wave
+        val gx = px + warp
+        val light = rgb(g.light); val mid = rgb(g.mid); val dark = rgb(g.dark)
+        // soft broad tone streaks
+        val s = fbm(gx * 1.05, py * 0.03 + 3.0)
+        var c = mix(mid, light, smooth(0.5 - 0.22 / g.streaks.coerceAtLeast(0.2), 0.5 + 0.22 / g.streaks.coerceAtLeast(0.2), s))
+        c = mix(c, mid, smooth(0.55, 0.8, fbm(gx * 2.4 + 11.0, py * 0.06)) * 0.4 * g.streaks)
+        c = mix(c, dark, smooth(0.66, 0.86, fbm(gx * 3.6 + 23.0, py * 0.08)) * 0.25 * g.streaks)
+        // ribbon stripe: alternating light/dark bands that catch the light differently
+        if (g.ribbon > 0) {
+            val r = sin(gx * 16.0 + fbm(gx * 1.5, py * 0.08) * 6.0)
+            val m = smooth(0.35, 0.65, fbm(gx * 0.9 + 3.0, py * 0.04))
+            c = DoubleArray(3) { c[it] * (1.0 + g.ribbon * 0.10 * r * (0.4 + 0.6 * m)) }
+        }
+        // cathedral arches: nested flame shapes pointing up the board
+        if (g.cathedral > 0) {
+            val ax = floor(px * 0.55)
+            val acx = (ax + 0.25 + hash(ax, 5.1) * 0.5) / 0.55
+            val acy = 1.0 + hash(ax, 9.3) * 6.0
+            val dx = gx - acx
+            val t = dx * dx * 5.0 - (py - acy) * 0.35
+            val arch = 1.0 - smooth(0.0, 0.16, fract(t * 2.2 + fbm(gx * 2.0, py * 0.2) * 0.8))
+            val mask = (1.0 - smooth(0.5, 1.6, kotlin.math.abs(dx) * 1.4)) * smooth(-0.6, 0.6, py - acy)
+            c = mix(c, dark, arch * mask * g.cathedral)
+            c = mix(c, light, (1.0 - smooth(0.2, 0.6, fract(t * 2.2 + 0.5))) * mask * g.cathedral * 0.25)
+        }
+        // fine grain lines
+        val l1 = 1.0 - smooth(0.0, 0.10, fract(gx * g.density + fbm(gx * 2.2, py * 0.14) * 4.0))
+        val l2 = 1.0 - smooth(0.0, 0.16, fract(gx * g.density * 2.6 + fbm(gx * 5.0, py * 0.3) * 5.0))
+        c = mix(c, dark, l1 * g.lines)
+        c = mix(c, dark, l2 * g.lines * 0.45)
+        // quarter-sawn ray flecks: pale satin flakes lying across the grain
+        if (g.rays > 0) {
+            val fx = gx * 3.2; val fy = py * 1.3
+            val cx = floor(fx); val cy = floor(fy)
+            for (j in -1..1) for (i in -1..1) {
+                val hx = cx + i; val hy = cy + j
+                if (hash(hx, hy) < 0.6) continue
+                val ox = hx + 0.5 + (hash(hx + 3.1, hy) - 0.5) * 0.6
+                val oy = hy + 0.5 + (hash(hx, hy + 5.7) - 0.5) * 0.6
+                val tilt = (hash(hx + 9.2, hy + 1.3) - 0.5) * 0.8
+                val dxx = fx - ox; val dyy = fy - oy - dxx * tilt
+                val wob = 1.0 + 0.35 * (noise(fx * 6.0, fy * 6.0) - 0.5)
+                val d = sqrt((dxx / 0.22) * (dxx / 0.22) + (dyy / 0.05) * (dyy / 0.05)) * wob
+                val m = 1.0 - smooth(0.6, 1.0, d)
+                if (m > 0) c = mix(c, DoubleArray(3) { light[it] * 1.08 }, m * g.rays)
+            }
+        }
+        // pores: tiny dark dashes along the grain
+        if (g.pores > 0) {
+            val cx = floor(gx * 14.0); val cy = floor(py * 2.2)
+            if (hash(cx, cy) > 0.9) {
+                val ox = 0.3 + hash(cx + 1.7, cy) * 0.4; val oy = 0.2 + hash(cx, cy + 3.1) * 0.6
+                val dx = (gx * 14.0 - cx - ox) / 0.08; val dy = (py * 2.2 - cy - oy) / 0.35
+                c = mix(c, DoubleArray(3) { dark[it] * 0.8 }, (1.0 - smooth(0.5, 1.0, sqrt(dx * dx + dy * dy))) * g.pores)
+            }
+        }
+        val fiber = noise(gx * 70.0, py * 1.5) * 0.6 + noise(gx * 160.0, py * 3.0) * 0.4
+        c = DoubleArray(3) { c[it] * (0.94 + 0.09 * fiber) }
+        val ux = x / sw; val uy = y / sh
+        val sheen = kotlin.math.exp(-((ux - 0.35) * (ux - 0.35) * 4.0 + (uy - 0.25) * (uy - 0.25) * 2.0)) * 0.06
+        c = DoubleArray(3) { c[it] + sheen }
+        val vx = ux - 0.5; val vy = (uy - 0.45) * 1.1
+        val vig = 0.80 + 0.20 * smooth(1.25, 0.25, sqrt(vx * vx + vy * vy))
+        return DoubleArray(3) { c[it] * vig }
+    }
+
+    /** Figured burl: grain swirls round clusters of small dark eyes. */
+    fun burl(light: Int, mid: Int, dark: Int, x: Double, y: Double, sw: Double, sh: Double): DoubleArray {
+        val px = x / sw * 4.0; val py = y / sw * 4.0
+        val wx = px + (fbm(px * 0.7, py * 0.7) - 0.5) * 2.4
+        val wy = py + (fbm(px * 0.7 + 5.2, py * 0.7 + 1.3) - 0.5) * 2.4
+        val sc = 1.6
+        val gx = floor(wx * sc); val gy = floor(wy * sc)
+        var f = fbm(wx * 1.2, wy * 1.2) * 2.5
+        var eye = 0.0
+        for (j in -1..1) for (i in -1..1) {
+            val hx = gx + i; val hy = gy + j
+            val ex = (hx + hash(hx, hy)) / sc; val ey = (hy + hash(hx + 7.7, hy + 3.3)) / sc
+            val d = sqrt((wx - ex) * (wx - ex) + (wy - ey) * (wy - ey))
+            f += 1.1 / (1.0 + d * d * 30.0)
+            if (hash(hx + 1.1, hy + 2.2) > 0.35) eye = max(eye, 1.0 - smooth(0.012, 0.03, d))
+        }
+        val r = fract(f * 2.2)
+        val band = smooth(0.0, 0.35, r) * (1.0 - smooth(0.55, 1.0, r))
+        val L = rgb(light); val M = rgb(mid); val D = rgb(dark)
+        var c = mix(M, L, 0.15 + 0.85 * band)
+        c = mix(c, D, (1.0 - smooth(0.0, 0.05, r)) * 0.32)
+        c = mix(c, M, smooth(0.45, 0.75, fbm(px * 0.8 + 9.0, py * 0.8)) * 0.35)
+        c = mix(c, DoubleArray(3) { D[it] * 0.6 }, eye * 0.9)
+        val ux = x / sw; val uy = y / sh
+        val sheen = kotlin.math.exp(-((ux - 0.35) * (ux - 0.35) * 4.0 + (uy - 0.25) * (uy - 0.25) * 2.0)) * 0.06
+        c = DoubleArray(3) { c[it] + sheen }
+        val vx = ux - 0.5; val vy = (uy - 0.45) * 1.1
+        val vig = 0.80 + 0.20 * smooth(1.25, 0.25, sqrt(vx * vx + vy * vy))
+        return DoubleArray(3) { c[it] * vig }
+    }
+
+    /** Side-by-side comparison of candidate woods for world 1, with a mock carved maze on each. */
+    fun preview(out: File, width: Int = 900, height: Int = 1950) {
+        val cands: List<Pair<String, (Double, Double) -> DoubleArray>> = listOf(
+            "1 Dark Walnut" to { x, y -> grain(Grain(0x96643E, 0x6A4329, 0x2C180B, streaks = 0.9, lines = 0.42, density = 10.0, cathedral = 0.45, pores = 0.4), x, y, width.toDouble(), height.toDouble()) },
+            "2 Honey Oak" to { x, y -> grain(HONEY_OAK, x, y, width.toDouble(), height.toDouble()) },
+            "3 Mahogany" to { x, y -> grain(Grain(0xAE6040, 0x86412A, 0x3E160A, streaks = 0.6, lines = 0.30, density = 14.0, wave = 0.4, ribbon = 1.0, pores = 0.25), x, y, width.toDouble(), height.toDouble()) },
+            "4 Smoked Ash" to { x, y -> grain(Grain(0xB8AA98, 0x928472, 0x4A4137, streaks = 0.8, lines = 0.45, density = 8.0, wave = 0.8, cathedral = 0.4, pores = 0.3), x, y, width.toDouble(), height.toDouble()) },
+            "6 Light Maple" to { x, y -> grain(LIGHT_MAPLE, x, y, width.toDouble(), height.toDouble()) },
+            "5 Amber Burl" to { x, y -> burl(0xD9A062, 0xAC6C36, 0x4A2410, x, y, width.toDouble(), height.toDouble()) },
+        )
+        val tw = width / 3; val th = height / 3; val gap = 16
+        val sheet = BufferedImage(cands.size * (tw + gap) + gap, th + 70, BufferedImage.TYPE_INT_RGB)
+        val g2 = sheet.createGraphics()
+        g2.color = java.awt.Color(0x1B1B1B); g2.fillRect(0, 0, sheet.width, sheet.height)
+        g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+        g2.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        for ((k, cand) in cands.withIndex()) {
+            val img = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+            for (y in 0 until height) for (x in 0 until width) {
+                val c = cand.second(x + 0.5, y + 0.5)
+                val r = (c[0].coerceIn(0.0, 1.0) * 255).toInt(); val g = (c[1].coerceIn(0.0, 1.0) * 255).toInt(); val b = (c[2].coerceIn(0.0, 1.0) * 255).toInt()
+                img.setRGB(x, y, (r shl 16) or (g shl 8) or b)
+            }
+            // mock carved maze so the contrast with the espresso channel can be judged
+            val gi = img.createGraphics()
+            gi.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+            gi.stroke = java.awt.BasicStroke(70f, java.awt.BasicStroke.CAP_SQUARE, java.awt.BasicStroke.JOIN_MITER)
+            val path = java.awt.geom.Path2D.Double().apply {
+                moveTo(180.0, 600.0); lineTo(720.0, 600.0); lineTo(720.0, 900.0); lineTo(300.0, 900.0); lineTo(300.0, 1200.0)
+                lineTo(720.0, 1200.0); lineTo(720.0, 1500.0); lineTo(180.0, 1500.0); moveTo(180.0, 600.0); lineTo(180.0, 1100.0)
+            }
+            gi.color = java.awt.Color(0x1B0D05); gi.draw(path)
+            gi.stroke = java.awt.BasicStroke(58f, java.awt.BasicStroke.CAP_SQUARE, java.awt.BasicStroke.JOIN_MITER)
+            gi.color = java.awt.Color(0x2B160A); gi.draw(path)
+            gi.dispose()
+            val ox = gap + k * (tw + gap)
+            g2.drawImage(img, ox, gap, tw, th, null)
+            g2.color = java.awt.Color(0xF2E6D0); g2.font = java.awt.Font("SansSerif", java.awt.Font.BOLD, 22)
+            g2.drawString(cand.first, ox + 6, th + gap + 36)
+        }
+        g2.dispose()
+        out.parentFile?.mkdirs()
+        ImageIO.write(sheet, "png", out)
+        println("  ${out.path}")
+    }
+
     fun run(outDir: File, width: Int = 900, height: Int = 1950) {
         outDir.mkdirs()
         val writer = ImageIO.getImageWritersByFormatName("jpg").next()
@@ -282,6 +451,24 @@ object MaterialArt {
             ImageIO.createImageOutputStream(f).use { out ->
                 writer.output = out
                 val p = writer.defaultWriteParam.apply { compressionMode = ImageWriteParam.MODE_EXPLICIT; compressionQuality = 0.86f }
+                writer.write(null, IIOImage(img, null, null), p)
+            }
+            println("  ${f.path}  ${f.length() / 1024} KB")
+        }
+        // the level-preview wood used on cream cards
+        run {
+            val bw = 600; val bh = 900
+            val img = BufferedImage(bw, bh, BufferedImage.TYPE_INT_RGB)
+            for (y in 0 until bh) for (x in 0 until bw) {
+                val c = grain(CARD_TEAK, x + 0.5, y + 0.5, bw.toDouble(), bh.toDouble())
+                val r = (c[0].coerceIn(0.0, 1.0) * 255).toInt(); val g = (c[1].coerceIn(0.0, 1.0) * 255).toInt(); val b = (c[2].coerceIn(0.0, 1.0) * 255).toInt()
+                img.setRGB(x, y, (r shl 16) or (g shl 8) or b)
+            }
+            val f = File(outDir, "board_wood.jpg")
+            f.delete()
+            ImageIO.createImageOutputStream(f).use { out ->
+                writer.output = out
+                val p = writer.defaultWriteParam.apply { compressionMode = ImageWriteParam.MODE_EXPLICIT; compressionQuality = 0.88f }
                 writer.write(null, IIOImage(img, null, null), p)
             }
             println("  ${f.path}  ${f.length() / 1024} KB")

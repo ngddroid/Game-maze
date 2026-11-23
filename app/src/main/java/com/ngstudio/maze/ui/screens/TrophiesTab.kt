@@ -151,6 +151,8 @@ private fun AchievementRow(a: Achievement, store: GameStore) {
             claimed -> GameIcon(Icon.CHECK, Candy.mint, size = 30.dp)
             done -> CandyButton("+${a.reward}", Modifier.width(86.dp), height = 40.dp, textSize = 17.sp, color = Candy.orange, dark = Candy.orangeDark) {
                 store.claimAchievement(a.id, a.reward); MazeApp.instance.sound.coin()
+                MazeApp.instance.telemetry.achievementUnlocked(a.id)
+                MazeApp.instance.telemetry.earn("coins", a.reward.toLong(), "achievement")
             }
             else -> Row(verticalAlignment = Alignment.CenterVertically) { CoinIcon(size = 18.dp); BodyText(" ${a.reward}", size = 13.sp, color = Candy.greyDark) }
         }

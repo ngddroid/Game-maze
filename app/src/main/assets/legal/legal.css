@@ -35,3 +35,9 @@ p, li { margin: 6px 0; } ul { padding-left: 20px; }
 .muted { color: var(--muted); font-size: 13px; }
 a { color: var(--green); font-weight: 700; }
 .fill { background: rgba(255,201,60,.4); border-radius: 6px; padding: 0 4px; }
+
+/* "Provided by" footer: on the page background below the last card, centred label over the studio logo. */
+.provided { text-align: center; margin: 26px 0 8px; }
+.provided-label { font-size: 15px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); }
+.provided img { display: block; width: 150px; height: auto; margin: 10px auto 0; filter: drop-shadow(0 4px 8px rgba(90,52,24,.18)); }
+.address { margin-top: 12px; line-height: 1.7; }
