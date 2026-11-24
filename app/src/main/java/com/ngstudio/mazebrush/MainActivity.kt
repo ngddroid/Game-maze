@@ -106,7 +106,8 @@ private fun AppNav() {
     val store = app.store
     // Debug only: `adb shell am start -n com.ngstudio.mazebrush/.MainActivity --ei debugLevel 251` opens any level for QA
     // (it does not unlock anything).
-    val debugLevel = (LocalContext.current as? android.app.Activity)?.intent?.getIntExtra("debugLevel", 0) ?: 0
+    val activity = LocalContext.current as? android.app.Activity
+    val debugLevel = if (BuildConfig.DEBUG) activity?.intent?.getIntExtra("debugLevel", 0) ?: 0 else 0
     var stack by remember {
         mutableStateOf(
             if (BuildConfig.DEBUG && debugLevel > 0) listOf(Route.Home(HomeTab.HOME), Route.Game(PlayMode.Campaign(debugLevel)))

@@ -83,7 +83,19 @@ class LegalActivity : ComponentActivity() {
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val u = request.url
-                if (u.scheme == "file") return false
+                if (u.scheme == "file") {
+                    // A link to the other legal page opens it as its own screen (right header; Back returns here).
+                    val other = when (u.lastPathSegment) {
+                        "$PAGE_TERMS.html" -> PAGE_TERMS
+                        "$PAGE_PRIVACY.html" -> PAGE_PRIVACY
+                        else -> null
+                    }
+                    if (other != null && other != (intent.getStringExtra(EXTRA_PAGE) ?: PAGE_TERMS)) {
+                        open(this@LegalActivity, other)
+                        return true
+                    }
+                    return false
+                }
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 return true
             }

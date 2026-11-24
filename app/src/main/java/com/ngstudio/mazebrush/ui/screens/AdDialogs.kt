@@ -70,6 +70,7 @@ object Ads {
  */
 @Composable
 fun WatchAdDialog(level: Int, onClose: () -> Unit, onPlay: (Int) -> Unit) {
+    if (!Ads.rewarded.available) return // release: no ads yet, so no "watch ad to unlock"
     val store = MazeApp.instance.store
     var playingAd by remember { mutableStateOf(false) }
     var unlocked by remember { mutableStateOf(store.isUnlocked(level)) }
@@ -112,9 +113,10 @@ fun WatchAdDialog(level: Int, onClose: () -> Unit, onPlay: (Int) -> Unit) {
     }
 }
 
-/** Debug stand-in for a rewarded ad: a 3-second countdown, then the reward. */
+/** Debug stand-in for a rewarded ad: a 3-second countdown, then the reward. Never shown (and never rewards) in release. */
 @Composable
 fun FakeAdOverlay(onRewarded: () -> Unit) {
+    if (!com.ngstudio.mazebrush.BuildConfig.DEBUG) return
     val p = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         p.animateTo(1f, tween(3000, easing = LinearEasing))

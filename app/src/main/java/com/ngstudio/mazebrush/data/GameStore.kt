@@ -81,7 +81,14 @@ class GameStore(context: Context) {
     fun toggleVibration() { vibration = !vibration; prefs.edit().putBoolean("vibration", vibration).apply() }
 
     // ---------------------------------------------------------------- levels
-    fun isUnlocked(n: Int) = n <= maxUnlocked || n in extraUnlocked
+    /**
+     * Rewarded-ad unlocks (single levels, free skins) are only honoured while rewarded ads exist: today that is
+     * the debug build's fake ad. In release there are no ads yet, so levels open strictly one by one by winning
+     * the previous level, and any ad unlocks saved by a debug build are ignored.
+     */
+    private val adUnlocks: Boolean get() = com.ngstudio.mazebrush.ui.screens.Ads.rewarded.available
+
+    fun isUnlocked(n: Int) = n <= maxUnlocked || (adUnlocks && n in extraUnlocked)
     fun starsOf(n: Int): Int = stars.getOrElse(n - 1) { 0 }.toInt()
     fun isCompleted(n: Int) = starsOf(n) > 0
     val completedCount: Int get() { starsVersion; return stars.count { it > 0 } }
@@ -92,7 +99,7 @@ class GameStore(context: Context) {
 
     /** Unlock one specific level (debug Watch Ad / rewarded ad). */
     fun unlockSingle(n: Int) {
-        if (isUnlocked(n)) return
+        if (!adUnlocks || isUnlocked(n)) return
         extraUnlocked = extraUnlocked + n
         prefs.edit().putStringSet("extra_unlocked", extraUnlocked.map { it.toString() }.toSet()).apply()
     }
@@ -129,7 +136,7 @@ class GameStore(context: Context) {
                 // Frontier moves on; single unlocks at or below it are no longer needed.
                 maxUnlocked = n + 1
                 extraUnlocked = extraUnlocked.filter { it > maxUnlocked }.toSet()
-            } else if (!isUnlocked(n + 1)) {
+            } else if (adUnlocks && !isUnlocked(n + 1)) {
                 // Won a level that was unlocked on its own: open the one after it too.
                 extraUnlocked = extraUnlocked + (n + 1)
             }
@@ -174,9 +181,9 @@ class GameStore(context: Context) {
         save(owned + id); return true
     }
     /** Free unlocks (rewarded ad; debug fake ad for now). */
-    fun grantBall(id: Int) { ownedBalls = ownedBalls + id; putIntSet("owned_balls", ownedBalls) }
-    fun grantTrail(id: Int) { ownedTrails = ownedTrails + id; putIntSet("owned_trails", ownedTrails) }
-    fun grantFinish(id: Int) { ownedFinishes = ownedFinishes + id; putIntSet("owned_finishes", ownedFinishes) }
+    fun grantBall(id: Int) { if (!adUnlocks) return; ownedBalls = ownedBalls + id; putIntSet("owned_balls", ownedBalls) }
+    fun grantTrail(id: Int) { if (!adUnlocks) return; ownedTrails = ownedTrails + id; putIntSet("owned_trails", ownedTrails) }
+    fun grantFinish(id: Int) { if (!adUnlocks) return; ownedFinishes = ownedFinishes + id; putIntSet("owned_finishes", ownedFinishes) }
     fun selectBall(id: Int) { if (id in ownedBalls) { ballSkin = id; prefs.edit().putInt("ball", id).apply() } }
     fun selectTrail(id: Int) { if (id in ownedTrails) { trail = id; prefs.edit().putInt("trail", id).apply() } }
     fun selectFinish(id: Int) { if (id in ownedFinishes) { finish = id; prefs.edit().putInt("finish", id).apply() } }
@@ -235,11 +242,13 @@ class GameStore(context: Context) {
 
     // ---------------------------------------------------------------- debug tools
     fun debugUnlockAll() {
+        if (!com.ngstudio.mazebrush.BuildConfig.DEBUG) return
         maxUnlocked = LevelRepository.TOTAL
         prefs.edit().putInt("max_unlocked", maxUnlocked).apply()
     }
 
     fun debugReset() {
+        if (!com.ngstudio.mazebrush.BuildConfig.DEBUG) return
         prefs.edit().clear().apply()
         stars.fill(0)
         starsFile.delete()

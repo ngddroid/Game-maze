@@ -42,7 +42,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ngstudio.mazebrush.BuildConfig
 import com.ngstudio.mazebrush.MazeApp
 import com.ngstudio.mazebrush.data.LevelRepository
 import com.ngstudio.mazebrush.render.WorldTheme
@@ -103,7 +102,7 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
                     val n = chapter * PER_CHAPTER + i + 1
                     LevelBubble(n, theme, Modifier.graphicsLayer { if (lockedMsg == n) translationX = shake.value }) {
                         if (store.isUnlocked(n)) onPlay(n)
-                        else if (BuildConfig.DEBUG && Ads.rewarded.available) adFor = n
+                        else if (Ads.rewarded.available) adFor = n // debug fake ad only; release: no ads, so finish the previous level
                         else {
                             MazeApp.instance.sound.bonk()
                             lockedMsg = n
@@ -142,7 +141,7 @@ private fun ChapterChip(c: Int, selected: Boolean, onClick: () -> Unit) {
     val store = MazeApp.instance.store
     val first = c * PER_CHAPTER + 1
     val theme = WorldTheme.forLevel(first)
-    val unlocked = store.isUnlocked(first) || (first..first + PER_CHAPTER - 1).any { it in store.extraUnlocked }
+    val unlocked = store.isUnlocked(first) || (first..first + PER_CHAPTER - 1).any { store.isUnlocked(it) }
     store.starsVersion
     val stars = remember(store.starsVersion, c) { (first until first + PER_CHAPTER).sumOf { store.starsOf(it) } }
     Column(
