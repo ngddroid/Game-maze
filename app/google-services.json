@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1076524488754:android:21a1126441374d211a842b",
+        "mobilesdk_app_id": "1:1076524488754:android:54a150d4ae7070411a842b",
         "android_client_info": {
-          "package_name": "com.ngstudio.maze"
+          "package_name": "com.ngstudio.mazebrush"
         }
       },
       "oauth_client": [],
