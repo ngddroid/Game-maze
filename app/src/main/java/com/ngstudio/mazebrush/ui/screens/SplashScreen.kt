@@ -82,7 +82,7 @@ fun SplashScreen(onDone: () -> Unit) {
         }
     }
 
-    SurfaceBackground(WorldTheme.ALL[0]) {
+    SurfaceBackground {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             var k = 0
             for ((wi, word) in words.withIndex()) {
@@ -128,7 +128,7 @@ fun SplashScreen(onDone: () -> Unit) {
         Column(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 48.dp).fillMaxWidth(0.72f), horizontalAlignment = Alignment.CenterHorizontally) {
             PaintProgressBar(progress, Candy.mint, Modifier.fillMaxWidth())
             VSpace(8.dp)
-            BodyText("Mixing the paint…", size = 14.sp, color = WorldTheme.ALL[0].ink.color())
+            BodyText("Mixing the paint…", size = 14.sp, color = com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color())
             VSpace(4.dp)
             BodyText("v${BuildConfig.VERSION_NAME}", size = 11.sp, color = lerp(Color.White, Candy.plum, 0.3f))
         }

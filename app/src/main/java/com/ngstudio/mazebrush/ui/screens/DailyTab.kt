@@ -71,7 +71,7 @@ fun DailyTab(onPlayDaily: (Long) -> Unit) {
     val hms = "%dh %02dm".format(untilMidnight / 3_600_000, (untilMidnight / 60_000) % 60)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        EngravedText("DAILY", 34.sp, WorldTheme.forLevel(store.currentLevel).ink.color())
+        EngravedText("DAILY", 34.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color())
         VSpace(8.dp)
         Panel(Modifier.fillMaxWidth(), padding = 16.dp) {
             Ribbon("DAILY CHALLENGE", color = Candy.sky, dark = Candy.skyDark)

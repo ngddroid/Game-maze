@@ -84,7 +84,7 @@ fun TrophiesTab() {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 60.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                EngravedText("TROPHIES", 34.sp, com.ngstudio.mazebrush.render.WorldTheme.forLevel(store.currentLevel).ink.color())
+                EngravedText("TROPHIES", 34.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color())
                 VSpace(8.dp)
                 Panel(Modifier.fillMaxWidth(), padding = 14.dp) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {

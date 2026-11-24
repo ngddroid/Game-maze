@@ -84,6 +84,138 @@ class WorldTheme(
     }
 }
 
+/** Corner decorations of a chapter theme (drawn by ui/components/ThemeDecor.kt). */
+enum class Decor { LEAVES, BEACH, SNOW, MEADOW, NIGHT, CANDY, DESERT, SEA, SAKURA, CLOUDS, PROPS }
+
+/**
+ * The scene behind every screen (menus and the game): a full-screen picture plus its own corner decorations.
+ * It changes every chapter (50 levels), 100 scenes for the 100 chapters (and repeats after level 5000):
+ * chapter 1 is the wood with leaves, 2..10 are hand-made (ThemeArt + ThemeDecor), 11..100 are built from
+ * the scene kit (SceneArt + ChapterProps). The world ([WorldTheme]) still decides the board, channel
+ * and paint colours. Pictures: surface_0.jpg (chapter 1) and backdrop_N.jpg from `:tools:run --args="backdrops"`
+ * (tools ThemeArt.THEMES; keep the order in sync).
+ */
+class Backdrop(
+    val index: Int,
+    val name: String,
+    /** drawable-nodpi image (900 x 1950). */
+    val res: Int,
+    /** Titles and text drawn straight on the background. */
+    val ink: Rgb,
+    val decor: Decor,
+) {
+    companion object {
+        private fun c(h: Int) = Rgb(h)
+
+        val ALL: List<Backdrop> = listOf(
+            Backdrop(0, "Golden Teak", com.ngstudio.mazebrush.R.drawable.surface_0, c(0x5A2D12), Decor.LEAVES),
+            Backdrop(1, "Sunny Beach", com.ngstudio.mazebrush.R.drawable.backdrop_1, c(0x6B3A12), Decor.BEACH),
+            Backdrop(2, "Snowy Peaks", com.ngstudio.mazebrush.R.drawable.backdrop_2, c(0x1E3A5F), Decor.SNOW),
+            Backdrop(3, "Flower Meadow", com.ngstudio.mazebrush.R.drawable.backdrop_3, c(0x2F5212), Decor.MEADOW),
+            Backdrop(4, "Starry Night", com.ngstudio.mazebrush.R.drawable.backdrop_4, c(0xFFF1D6), Decor.NIGHT),
+            Backdrop(5, "Candy Land", com.ngstudio.mazebrush.R.drawable.backdrop_5, c(0x8A1F55), Decor.CANDY),
+            Backdrop(6, "Desert Dunes", com.ngstudio.mazebrush.R.drawable.backdrop_6, c(0x6A2E0C), Decor.DESERT),
+            Backdrop(7, "Under the Sea", com.ngstudio.mazebrush.R.drawable.backdrop_7, c(0x0B3556), Decor.SEA),
+            Backdrop(8, "Sakura Garden", com.ngstudio.mazebrush.R.drawable.backdrop_8, c(0x7A2348), Decor.SAKURA),
+            Backdrop(9, "Cloud Kingdom", com.ngstudio.mazebrush.R.drawable.backdrop_9, c(0x1F4A78), Decor.CLOUDS),
+            // chapters 11..100: SceneArt paintings + ChapterProps.kt props
+            Backdrop(10, "Autumn Forest", com.ngstudio.mazebrush.R.drawable.backdrop_10, c(0x5A2208), Decor.PROPS),
+            Backdrop(11, "Pumpkin Patch", com.ngstudio.mazebrush.R.drawable.backdrop_11, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(12, "Rainy Day", com.ngstudio.mazebrush.R.drawable.backdrop_12, c(0x2A3A4E), Decor.PROPS),
+            Backdrop(13, "Rainbow Valley", com.ngstudio.mazebrush.R.drawable.backdrop_13, c(0x1F4A78), Decor.PROPS),
+            Backdrop(14, "Mushroom Forest", com.ngstudio.mazebrush.R.drawable.backdrop_14, c(0xE8FFF0), Decor.PROPS),
+            Backdrop(15, "Bamboo Grove", com.ngstudio.mazebrush.R.drawable.backdrop_15, c(0x2E5A1E), Decor.PROPS),
+            Backdrop(16, "Lavender Fields", com.ngstudio.mazebrush.R.drawable.backdrop_16, c(0x5A2E7A), Decor.PROPS),
+            Backdrop(17, "Sunflower Farm", com.ngstudio.mazebrush.R.drawable.backdrop_17, c(0x1F4A78), Decor.PROPS),
+            Backdrop(18, "Pine Woods", com.ngstudio.mazebrush.R.drawable.backdrop_18, c(0x1E4A38), Decor.PROPS),
+            Backdrop(19, "Lily Pond", com.ngstudio.mazebrush.R.drawable.backdrop_19, c(0x0E3328), Decor.PROPS),
+            Backdrop(20, "Northern Lights", com.ngstudio.mazebrush.R.drawable.backdrop_20, c(0xF0F8FF), Decor.PROPS),
+            Backdrop(21, "Ice Cave", com.ngstudio.mazebrush.R.drawable.backdrop_21, c(0x0E3A6A), Decor.PROPS),
+            Backdrop(22, "Polar Bay", com.ngstudio.mazebrush.R.drawable.backdrop_22, c(0x1E3A5F), Decor.PROPS),
+            Backdrop(23, "Christmas Eve", com.ngstudio.mazebrush.R.drawable.backdrop_23, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(24, "Holiday Lights", com.ngstudio.mazebrush.R.drawable.backdrop_24, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(25, "Spring Garden", com.ngstudio.mazebrush.R.drawable.backdrop_25, c(0x2F5212), Decor.PROPS),
+            Backdrop(26, "Cherry Orchard", com.ngstudio.mazebrush.R.drawable.backdrop_26, c(0x7A2348), Decor.PROPS),
+            Backdrop(27, "Citrus Grove", com.ngstudio.mazebrush.R.drawable.backdrop_27, c(0x8A4A00), Decor.PROPS),
+            Backdrop(28, "Berry Patch", com.ngstudio.mazebrush.R.drawable.backdrop_28, c(0x8A1F3A), Decor.PROPS),
+            Backdrop(29, "Honey Hive", com.ngstudio.mazebrush.R.drawable.backdrop_29, c(0x6A3A00), Decor.PROPS),
+            Backdrop(30, "Sunset Sky", com.ngstudio.mazebrush.R.drawable.backdrop_30, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(31, "Golden Hills", com.ngstudio.mazebrush.R.drawable.backdrop_31, c(0x6A3A08), Decor.PROPS),
+            Backdrop(32, "Moon Base", com.ngstudio.mazebrush.R.drawable.backdrop_32, c(0xF0F4FF), Decor.PROPS),
+            Backdrop(33, "Galaxy Swirl", com.ngstudio.mazebrush.R.drawable.backdrop_33, c(0xF6E8FF), Decor.PROPS),
+            Backdrop(34, "Rocket Launch", com.ngstudio.mazebrush.R.drawable.backdrop_34, c(0xF0F4FF), Decor.PROPS),
+            Backdrop(35, "Alien Planet", com.ngstudio.mazebrush.R.drawable.backdrop_35, c(0xF0FFF8), Decor.PROPS),
+            Backdrop(36, "Meteor Shower", com.ngstudio.mazebrush.R.drawable.backdrop_36, c(0xF0F4FF), Decor.PROPS),
+            Backdrop(37, "Kite Festival", com.ngstudio.mazebrush.R.drawable.backdrop_37, c(0x1F4A78), Decor.PROPS),
+            Backdrop(38, "Balloon Fiesta", com.ngstudio.mazebrush.R.drawable.backdrop_38, c(0x6A3A1E), Decor.PROPS),
+            Backdrop(39, "Paper Planes", com.ngstudio.mazebrush.R.drawable.backdrop_39, c(0x2A4A7A), Decor.PROPS),
+            Backdrop(40, "Pastel Clouds", com.ngstudio.mazebrush.R.drawable.backdrop_40, c(0x7A3A7A), Decor.PROPS),
+            Backdrop(41, "Thunder Storm", com.ngstudio.mazebrush.R.drawable.backdrop_41, c(0xF0F4FF), Decor.PROPS),
+            Backdrop(42, "Windmill Hills", com.ngstudio.mazebrush.R.drawable.backdrop_42, c(0x1F4A78), Decor.PROPS),
+            Backdrop(43, "Starlight Lake", com.ngstudio.mazebrush.R.drawable.backdrop_43, c(0xF0F4FF), Decor.PROPS),
+            Backdrop(44, "Comet Trail", com.ngstudio.mazebrush.R.drawable.backdrop_44, c(0xF0F4FF), Decor.PROPS),
+            Backdrop(45, "Coral Reef", com.ngstudio.mazebrush.R.drawable.backdrop_45, c(0x0B3556), Decor.PROPS),
+            Backdrop(46, "Deep Sea", com.ngstudio.mazebrush.R.drawable.backdrop_46, c(0xE6F8FF), Decor.PROPS),
+            Backdrop(47, "Pirate Cove", com.ngstudio.mazebrush.R.drawable.backdrop_47, c(0x0B3556), Decor.PROPS),
+            Backdrop(48, "Lighthouse Coast", com.ngstudio.mazebrush.R.drawable.backdrop_48, c(0x6A2E1A), Decor.PROPS),
+            Backdrop(49, "Sailing Bay", com.ngstudio.mazebrush.R.drawable.backdrop_49, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(50, "Kelp Forest", com.ngstudio.mazebrush.R.drawable.backdrop_50, c(0x0E3A2E), Decor.PROPS),
+            Backdrop(51, "Jellyfish Lagoon", com.ngstudio.mazebrush.R.drawable.backdrop_51, c(0xF6E8FF), Decor.PROPS),
+            Backdrop(52, "Ice Rink", com.ngstudio.mazebrush.R.drawable.backdrop_52, c(0x1E3A5F), Decor.PROPS),
+            Backdrop(53, "Pearl Shore", com.ngstudio.mazebrush.R.drawable.backdrop_53, c(0x6B3A12), Decor.PROPS),
+            Backdrop(54, "Tropical Lagoon", com.ngstudio.mazebrush.R.drawable.backdrop_54, c(0x6B3A12), Decor.PROPS),
+            Backdrop(55, "River Rapids", com.ngstudio.mazebrush.R.drawable.backdrop_55, c(0x1F4A78), Decor.PROPS),
+            Backdrop(56, "Red Canyon", com.ngstudio.mazebrush.R.drawable.backdrop_56, c(0x6A1E0A), Decor.PROPS),
+            Backdrop(57, "Savanna", com.ngstudio.mazebrush.R.drawable.backdrop_57, c(0x5A2208), Decor.PROPS),
+            Backdrop(58, "Pyramid Sands", com.ngstudio.mazebrush.R.drawable.backdrop_58, c(0x6A2E0C), Decor.PROPS),
+            Backdrop(59, "Desert Oasis", com.ngstudio.mazebrush.R.drawable.backdrop_59, c(0x6A2E0C), Decor.PROPS),
+            Backdrop(60, "Volcano Island", com.ngstudio.mazebrush.R.drawable.backdrop_60, c(0xFFE6CC), Decor.PROPS),
+            Backdrop(61, "Lava Lake", com.ngstudio.mazebrush.R.drawable.backdrop_61, c(0xFFE6CC), Decor.PROPS),
+            Backdrop(62, "Crystal Cavern", com.ngstudio.mazebrush.R.drawable.backdrop_62, c(0xF6E8FF), Decor.PROPS),
+            Backdrop(63, "Gold Mine", com.ngstudio.mazebrush.R.drawable.backdrop_63, c(0xFFE8B0), Decor.PROPS),
+            Backdrop(64, "Dino Valley", com.ngstudio.mazebrush.R.drawable.backdrop_64, c(0x1E4A28), Decor.PROPS),
+            Backdrop(65, "Rocky Mountains", com.ngstudio.mazebrush.R.drawable.backdrop_65, c(0x1E3A5F), Decor.PROPS),
+            Backdrop(66, "Stone Garden", com.ngstudio.mazebrush.R.drawable.backdrop_66, c(0x3A3A2A), Decor.PROPS),
+            Backdrop(67, "Ice Cream Parlor", com.ngstudio.mazebrush.R.drawable.backdrop_67, c(0x8A1F55), Decor.PROPS),
+            Backdrop(68, "Cupcake Bakery", com.ngstudio.mazebrush.R.drawable.backdrop_68, c(0x8A1F55), Decor.PROPS),
+            Backdrop(69, "Donut Shop", com.ngstudio.mazebrush.R.drawable.backdrop_69, c(0x6A2E0C), Decor.PROPS),
+            Backdrop(70, "Chocolate Factory", com.ngstudio.mazebrush.R.drawable.backdrop_70, c(0xFFE8CC), Decor.PROPS),
+            Backdrop(71, "Bubblegum Pop", com.ngstudio.mazebrush.R.drawable.backdrop_71, c(0x8A1F55), Decor.PROPS),
+            Backdrop(72, "Lemonade Stand", com.ngstudio.mazebrush.R.drawable.backdrop_72, c(0x7A4A00), Decor.PROPS),
+            Backdrop(73, "Cookie Jar", com.ngstudio.mazebrush.R.drawable.backdrop_73, c(0x5A2E14), Decor.PROPS),
+            Backdrop(74, "Watermelon Summer", com.ngstudio.mazebrush.R.drawable.backdrop_74, c(0x4A0E16), Decor.PROPS),
+            Backdrop(75, "Jelly Beans", com.ngstudio.mazebrush.R.drawable.backdrop_75, c(0x8A1F55), Decor.PROPS),
+            Backdrop(76, "Candy Stripes", com.ngstudio.mazebrush.R.drawable.backdrop_76, c(0x8A1F55), Decor.PROPS),
+            Backdrop(77, "Marshmallow Clouds", com.ngstudio.mazebrush.R.drawable.backdrop_77, c(0x7A3A7A), Decor.PROPS),
+            Backdrop(78, "Toy Box", com.ngstudio.mazebrush.R.drawable.backdrop_78, c(0x1A3A6A), Decor.PROPS),
+            Backdrop(79, "Circus Tent", com.ngstudio.mazebrush.R.drawable.backdrop_79, c(0x7A1010), Decor.PROPS),
+            Backdrop(80, "Carnival Night", com.ngstudio.mazebrush.R.drawable.backdrop_80, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(81, "Music Stage", com.ngstudio.mazebrush.R.drawable.backdrop_81, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(82, "Art Studio", com.ngstudio.mazebrush.R.drawable.backdrop_82, c(0x3A2A4A), Decor.PROPS),
+            Backdrop(83, "Library", com.ngstudio.mazebrush.R.drawable.backdrop_83, c(0xFFE8C8), Decor.PROPS),
+            Backdrop(84, "Chess Hall", com.ngstudio.mazebrush.R.drawable.backdrop_84, c(0x4A2A10), Decor.PROPS),
+            Backdrop(85, "Castle Kingdom", com.ngstudio.mazebrush.R.drawable.backdrop_85, c(0x1F4A78), Decor.PROPS),
+            Backdrop(86, "Fairy Garden", com.ngstudio.mazebrush.R.drawable.backdrop_86, c(0x6A3A8A), Decor.PROPS),
+            Backdrop(87, "Lantern Festival", com.ngstudio.mazebrush.R.drawable.backdrop_87, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(88, "Halloween Night", com.ngstudio.mazebrush.R.drawable.backdrop_88, c(0xFFE6C8), Decor.PROPS),
+            Backdrop(89, "Spooky Swamp", com.ngstudio.mazebrush.R.drawable.backdrop_89, c(0xE8FFE8), Decor.PROPS),
+            Backdrop(90, "Robot Lab", com.ngstudio.mazebrush.R.drawable.backdrop_90, c(0xE0FAFF), Decor.PROPS),
+            Backdrop(91, "Neon City", com.ngstudio.mazebrush.R.drawable.backdrop_91, c(0xFFE6FF), Decor.PROPS),
+            Backdrop(92, "Retro Arcade", com.ngstudio.mazebrush.R.drawable.backdrop_92, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(93, "Sports Field", com.ngstudio.mazebrush.R.drawable.backdrop_93, c(0xFFFFFF), Decor.PROPS),
+            Backdrop(94, "Picnic Park", com.ngstudio.mazebrush.R.drawable.backdrop_94, c(0x7A1010), Decor.PROPS),
+            Backdrop(95, "Farm Fields", com.ngstudio.mazebrush.R.drawable.backdrop_95, c(0x1F4A78), Decor.PROPS),
+            Backdrop(96, "Fireworks Night", com.ngstudio.mazebrush.R.drawable.backdrop_96, c(0xFFF1D6), Decor.PROPS),
+            Backdrop(97, "Treasure Vault", com.ngstudio.mazebrush.R.drawable.backdrop_97, c(0xFFE8B0), Decor.PROPS),
+            Backdrop(98, "Origami Paper", com.ngstudio.mazebrush.R.drawable.backdrop_98, c(0x4A3A6A), Decor.PROPS),
+            Backdrop(99, "Grand Finale", com.ngstudio.mazebrush.R.drawable.backdrop_99, c(0x7A3A00), Decor.PROPS),
+        )
+
+        fun forChapter(chapter: Int): Backdrop = ALL[chapter.mod(ALL.size)]
+        fun forLevel(level: Int): Backdrop = forChapter(WorldTheme.chapterOf(level.coerceAtLeast(1)))
+    }
+}
+
 /** Ball skins (shop). Pattern ids match Shaders.BALL_FS. [metal] 0 = glossy plastic, 1 = mirror metal. */
 class BallSkin(
     val id: Int, val name: String, val price: Int,

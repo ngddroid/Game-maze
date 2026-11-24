@@ -50,6 +50,9 @@ import com.ngstudio.mazebrush.render.WorldTheme
 import com.ngstudio.mazebrush.ui.components.BodyText
 import com.ngstudio.mazebrush.ui.components.BottomLeaves
 import com.ngstudio.mazebrush.ui.components.TopLeaves
+import com.ngstudio.mazebrush.ui.components.TopDecor
+import com.ngstudio.mazebrush.ui.components.BottomDecor
+import com.ngstudio.mazebrush.ui.components.AmbientDecor
 import com.ngstudio.mazebrush.ui.components.SurfaceBackground
 import com.ngstudio.mazebrush.ui.components.CandyButton
 import com.ngstudio.mazebrush.ui.components.CoinIcon
@@ -86,9 +89,10 @@ fun HomeScreen(
 ) {
     val store = MazeApp.instance.store
     val theme = WorldTheme.forLevel(store.currentLevel)
-    SurfaceBackground(theme) {
-        TopLeaves()
-        BottomLeaves()
+    SurfaceBackground {
+        AmbientDecor()
+        TopDecor()
+        BottomDecor()
         Column(Modifier.fillMaxSize()) {
             // top bar
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -161,7 +165,7 @@ private fun HomeTabContent(theme: WorldTheme, onPlay: (Int) -> Unit, onTab: (Hom
     val current = store.currentLevel
     val level = remember(current) { app.levels.level(current) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        EngravedText("MAZE BRUSH", 36.sp, theme.ink.color())
+        EngravedText("MAZE BRUSH", 36.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color())
         WorldBadge("WORLD ${WorldTheme.worldIndexOf(current) + 1}  •  ${theme.name.uppercase()}", theme.accentDark.color())
         VSpace(8.dp)
         Panel(Modifier.fillMaxWidth(), padding = 12.dp) {

@@ -56,6 +56,8 @@ class SceneConfig(
     val paint2: Rgb,
     /** Skip the drop-in animation (used for previews). */
     val instant: Boolean = false,
+    /** The chapter's wood behind the board (the board itself keeps the world's material). */
+    val backdrop: Backdrop = Backdrop.ALL[0],
 )
 
 /** Called on the main thread. */
@@ -150,6 +152,10 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     private var bakeW = 1
     private var bakeH = 1
     private var surfaceTex = 0
+    private var backdropTex = 0
+    private var backdropRes = 0
+    private var bdW = 1f
+    private var bdH = 1f
     private var woodTex = 0
     private var woodW = 1f
     private var woodH = 1f
@@ -251,7 +257,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         ambient.initGl(quadVbo); boardFx.initGl(quadVbo); screenFx.initGl(quadVbo)
 
         // Context was (re)created: GPU resources must be rebuilt.
-        bakeColor = null; bakeMask = null; gridTex = 0; paintTex = 0; surfaceTex = 0; woodTex = 0; surfaceTheme = null
+        bakeColor = null; bakeMask = null; gridTex = 0; paintTex = 0; surfaceTex = 0; woodTex = 0; surfaceTheme = null; backdropTex = 0; backdropRes = 0
         if (cfg != null) needsBake = true
         lastNanos = System.nanoTime()
     }
@@ -468,12 +474,26 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         GlUtil.check("surface")
     }
 
-    /** Centre-crop mapping of the surface image onto the screen. */
-    private fun surfaceUniforms(p: Prog, unit: Int) {
-        val scale = max(w / surfW, h / surfH)
-        val dw = surfW * scale; val dh = surfH * scale
+    /** Loads the chapter's background wood (same picture as the menus) as a GL texture. */
+    private fun loadBackdrop(b: Backdrop) {
+        GlUtil.deleteTexture(backdropTex)
+        val opts = android.graphics.BitmapFactory.Options().apply { inScaled = false }
+        val bmp = android.graphics.BitmapFactory.decodeResource(com.ngstudio.mazebrush.MazeApp.instance.resources, b.res, opts)
+        backdropTex = GlUtil.genTexture()
+        GlUtil.linear(backdropTex)
+        android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bmp, 0)
+        bdW = bmp.width.toFloat(); bdH = bmp.height.toFloat()
+        bmp.recycle()
+        backdropRes = b.res
+        GlUtil.check("backdrop")
+    }
+
+    /** Centre-crop mapping of the surface image (or [tex], e.g. the backdrop) onto the screen. */
+    private fun surfaceUniforms(p: Prog, unit: Int, tex: Int = surfaceTex, texW: Float = surfW, texH: Float = surfH) {
+        val scale = max(w / texW, h / texH)
+        val dw = texW * scale; val dh = texH * scale
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, surfaceTex)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex)
         GLES30.glUniform1i(p.u("uSurface"), unit)
         GLES30.glUniform2f(p.u("uSurfOffset"), (dw - w) / 2f, (dh - h) / 2f)
         GLES30.glUniform2f(p.u("uSurfSize"), dw, dh)
@@ -908,11 +928,13 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         val c = cfg
         val theme = c?.theme ?: WorldTheme.ALL[0]
 
-        // background: the world's surface image
+        // background: the chapter's wood (the world's surface is only used for the board slab)
         if (surfaceTex == 0 || surfaceTheme !== theme) loadSurface(theme)
+        val bd = c?.backdrop ?: Backdrop.ALL[0]
+        if (backdropTex == 0 || backdropRes != bd.res) loadBackdrop(bd)
         GLES30.glUseProgram(pBg.id)
         quadUniforms(pBg, 0f, 0f, w, h, identity = true)
-        surfaceUniforms(pBg, 0)
+        surfaceUniforms(pBg, 0, backdropTex, bdW, bdH)
         drawQuad()
 
         // ambient particles

@@ -76,7 +76,7 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            EngravedText("LEVELS", 34.sp, WorldTheme.forLevel(store.currentLevel).ink.color(), Modifier.align(Alignment.CenterHorizontally))
+            EngravedText("LEVELS", 34.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color(), Modifier.align(Alignment.CenterHorizontally))
             VSpace(6.dp)
             LazyRow(state = rowState, contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(chapters) { c ->
@@ -86,7 +86,7 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
             VSpace(8.dp)
             val theme = WorldTheme.forLevel(chapter * PER_CHAPTER + 1)
             Box(Modifier.align(Alignment.CenterHorizontally).background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 4.dp)) {
-                BodyText("Chapter ${chapter + 1}  ·  ${theme.name}", size = 14.sp, color = theme.accentDark.color())
+                BodyText("Chapter ${chapter + 1}  ·  ${com.ngstudio.mazebrush.render.Backdrop.forChapter(chapter).name}", size = 14.sp, color = theme.accentDark.color())
             }
             val gridState = rememberLazyGridState()
             LaunchedEffect(chapter) {

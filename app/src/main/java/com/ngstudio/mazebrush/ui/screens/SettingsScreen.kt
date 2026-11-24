@@ -71,11 +71,11 @@ fun SettingsScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
     var confirmReset by remember { mutableStateOf(false) }
     BackHandler { if (confirmReset) confirmReset = false else onBack() }
-    SurfaceBackground(WorldTheme.forLevel(store.currentLevel)) {
+    SurfaceBackground {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(Icon.BACK, size = 46.dp) { onBack() }
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { EngravedText("SETTINGS", 32.sp, WorldTheme.forLevel(store.currentLevel).ink.color()) }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { EngravedText("SETTINGS", 32.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color()) }
                 Box(Modifier.width(52.dp))
             }
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -104,6 +104,11 @@ fun SettingsScreen(onBack: () -> Unit) {
                         VSpace(8.dp)
                         ToggleRow(Icon.PLAY, "Autoplay solutions", Candy.plum, DebugFlags.autoplay) { DebugFlags.autoplay = !DebugFlags.autoplay }
                         Divider()
+                        // cycles Auto -> chapter backgrounds 1..10 -> Auto (view only, saves nothing)
+                        val bdN = com.ngstudio.mazebrush.render.Backdrop.ALL.size
+                        val bdLabel = if (DebugFlags.backdrop < 0) "Auto" else "${DebugFlags.backdrop + 1}. ${com.ngstudio.mazebrush.render.Backdrop.ALL[DebugFlags.backdrop].name}"
+                        LinkRow(Icon.LEVELS, "Background: $bdLabel", Candy.plum) { DebugFlags.backdrop = if (DebugFlags.backdrop + 1 >= bdN) -1 else DebugFlags.backdrop + 1 }
+                        Divider()
                         LinkRow(Icon.LEVELS, "Unlock all 5000 levels", Candy.plum) { store.debugUnlockAll(); app.sound.unlock() }
                         Divider()
                         LinkRow(Icon.COIN, "+1000 coins", Candy.plum) { store.addCoins(1000); app.sound.coin() }
@@ -112,7 +117,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     }
                 }
                 VSpace(18.dp)
-                BodyText("Maze Brush  ·  v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", size = 13.sp, color = WorldTheme.forLevel(store.currentLevel).ink.color(), align = TextAlign.Center)
+                BodyText("Maze Brush  ·  v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", size = 13.sp, color = com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color(), align = TextAlign.Center)
                 VSpace(40.dp)
             }
         }

@@ -97,6 +97,9 @@ class GameStore(context: Context) {
     /** The level the big PLAY button opens: the first unlocked level not finished yet (the frontier). */
     val currentLevel: Int get() = maxUnlocked.coerceAtMost(LevelRepository.TOTAL)
 
+    /** The newest level the player can open: won up to, or unlocked one-off by an ad. Picks the menu background. */
+    val latestUnlocked: Int get() = maxOf(maxUnlocked, if (adUnlocks) extraUnlocked.maxOrNull() ?: 0 else 0).coerceAtMost(LevelRepository.TOTAL)
+
     /** Unlock one specific level (debug Watch Ad / rewarded ad). */
     fun unlockSingle(n: Int) {
         if (!adUnlocks || isUnlocked(n)) return

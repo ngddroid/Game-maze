@@ -52,6 +52,8 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         // Debug QA: `--ez autoplay true` plays every level's stored solution (see scripts/device_qa.sh).
         if (BuildConfig.DEBUG && intent.getBooleanExtra("autoplay", false)) com.ngstudio.mazebrush.game.DebugFlags.autoplay = true
+        // Debug: `--ei debugBackdrop 3` shows chapter background 3 (1-based) everywhere, without changing progress.
+        if (BuildConfig.DEBUG && intent.hasExtra("debugBackdrop")) com.ngstudio.mazebrush.game.DebugFlags.backdrop = intent.getIntExtra("debugBackdrop", 0) - 1
         if (savedInstanceState == null) logNotificationOpen(intent)
         setContent { MazeTheme { AppNav() } }
     }
@@ -111,6 +113,9 @@ private fun AppNav() {
     var stack by remember {
         mutableStateOf(
             if (BuildConfig.DEBUG && debugLevel > 0) listOf(Route.Home(HomeTab.HOME), Route.Game(PlayMode.Campaign(debugLevel)))
+            // Debug only: `--es debugTab levels` opens Home on that tab, skipping the intro (for screenshots).
+            else if (BuildConfig.DEBUG && activity?.intent?.getStringExtra("debugTab") != null)
+                listOf<Route>(Route.Home(HomeTab.values().firstOrNull { it.name.equals(activity.intent.getStringExtra("debugTab"), true) } ?: HomeTab.HOME))
             else listOf<Route>(Route.StudioIntro)
         )
     }

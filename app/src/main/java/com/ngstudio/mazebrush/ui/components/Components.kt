@@ -71,6 +71,7 @@ import com.ngstudio.mazebrush.MazeApp
 import com.ngstudio.mazebrush.R
 import com.ngstudio.mazebrush.render.Rgb
 import com.ngstudio.mazebrush.render.WorldTheme
+import com.ngstudio.mazebrush.render.Backdrop
 import com.ngstudio.mazebrush.ui.theme.Candy
 import com.ngstudio.mazebrush.ui.theme.Lilita
 import com.ngstudio.mazebrush.ui.theme.Nunito
@@ -274,12 +275,32 @@ private val SURFACES = intArrayOf(
     R.drawable.surface_5, R.drawable.surface_6, R.drawable.surface_7, R.drawable.surface_8, R.drawable.surface_9,
 )
 
-/** Menu background: the world's surface (same material as the playfield), pre-rendered by tools/MaterialArt. */
+/** The wood behind the screen: drives the corner leaves and engraved title colour (see [SurfaceBackground]). */
+val LocalBackdrop = androidx.compose.runtime.staticCompositionLocalOf { Backdrop.ALL[0] }
+
+/** The scene for the player's chapter: the newest unlocked level (won or ad-unlocked), or the debug override. */
+fun currentBackdrop(): Backdrop =
+    if (com.ngstudio.mazebrush.BuildConfig.DEBUG && com.ngstudio.mazebrush.game.DebugFlags.backdrop >= 0) Backdrop.forChapter(com.ngstudio.mazebrush.game.DebugFlags.backdrop)
+    else Backdrop.forLevel(com.ngstudio.mazebrush.MazeApp.instance.store.latestUnlocked)
+
+/** The wood for a given level (the game screen), or the debug override. */
+fun backdropForLevel(level: Int): Backdrop =
+    if (com.ngstudio.mazebrush.BuildConfig.DEBUG && com.ngstudio.mazebrush.game.DebugFlags.backdrop >= 0) Backdrop.forChapter(com.ngstudio.mazebrush.game.DebugFlags.backdrop)
+    else Backdrop.forLevel(level)
+
+/**
+ * Screen background: the chapter's wood (pre-rendered by tools/MaterialArt), cross-fading when a new
+ * chapter is reached. Provides [LocalBackdrop] to the content.
+ */
 @Composable
-fun SurfaceBackground(theme: WorldTheme, modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
-    Box(modifier.fillMaxSize().background(theme.matA.color())) {
-        Image(painterResource(SURFACES[theme.index % SURFACES.size]), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        content()
+fun SurfaceBackground(backdrop: Backdrop = currentBackdrop(), modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalBackdrop provides backdrop) {
+        Box(modifier.fillMaxSize().background(Color(0xFFE5B67C))) {
+            androidx.compose.animation.Crossfade(backdrop, animationSpec = tween(600), label = "backdrop") { b ->
+                Image(painterResource(b.res), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            }
+            content()
+        }
     }
 }
 

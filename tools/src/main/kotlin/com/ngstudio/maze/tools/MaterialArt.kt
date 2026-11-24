@@ -32,27 +32,27 @@ object MaterialArt {
         World(5, 0xE9BC8E, 0xD49F6D, 0xB8814F),
     )
 
-    private fun fract(x: Double) = x - floor(x)
-    private fun hash(x: Double, y: Double): Double {
+    internal fun fract(x: Double) = x - floor(x)
+    internal fun hash(x: Double, y: Double): Double {
         var px = fract(x * 123.34); var py = fract(y * 456.21)
         val d = px * (px + 45.32) + py * (py + 45.32)
         px += d; py += d
         return fract(px * py)
     }
-    private fun noise(x: Double, y: Double): Double {
+    internal fun noise(x: Double, y: Double): Double {
         val ix = floor(x); val iy = floor(y); val fx = x - ix; val fy = y - iy
         val ux = fx * fx * (3 - 2 * fx); val uy = fy * fy * (3 - 2 * fy)
         val a = hash(ix, iy); val b = hash(ix + 1, iy); val c = hash(ix, iy + 1); val d = hash(ix + 1, iy + 1)
         return (a + (b - a) * ux) + ((c + (d - c) * ux) - (a + (b - a) * ux)) * uy
     }
-    private fun fbm(x0: Double, y0: Double): Double {
+    internal fun fbm(x0: Double, y0: Double): Double {
         var s = 0.0; var a = 0.5; var x = x0; var y = y0
         for (i in 0 until 4) { s += a * noise(x, y); x *= 2.03; y *= 2.03; a *= 0.5 }
         return s
     }
-    private fun smooth(e0: Double, e1: Double, x: Double): Double { val t = ((x - e0) / (e1 - e0)).coerceIn(0.0, 1.0); return t * t * (3 - 2 * t) }
-    private fun mix(a: DoubleArray, b: DoubleArray, t: Double) = DoubleArray(3) { a[it] + (b[it] - a[it]) * t }
-    private fun rgb(h: Int) = doubleArrayOf(((h shr 16) and 255) / 255.0, ((h shr 8) and 255) / 255.0, (h and 255) / 255.0)
+    internal fun smooth(e0: Double, e1: Double, x: Double): Double { val t = ((x - e0) / (e1 - e0)).coerceIn(0.0, 1.0); return t * t * (3 - 2 * t) }
+    internal fun mix(a: DoubleArray, b: DoubleArray, t: Double) = DoubleArray(3) { a[it] + (b[it] - a[it]) * t }
+    internal fun rgb(h: Int) = doubleArrayOf(((h shr 16) and 255) / 255.0, ((h shr 8) and 255) / 255.0, (h and 255) / 255.0)
 
     private fun surface(w: World, sx: Double, sy: Double, sw: Double, sh: Double): DoubleArray {
         if (w.mat == 6) return planks(w, sx, sy, sw, sh)
@@ -139,10 +139,11 @@ object MaterialArt {
      * Rich varnished planks laid horizontally: per-plank tone, flowing grain that swirls round knots,
      * rounded plank edges, dark gaps between planks and a soft varnish sheen.
      */
-    private fun planks(w: World, x: Double, y: Double, sw: Double, sh: Double): DoubleArray {
+    private fun planks(w: World, x: Double, y: Double, sw: Double, sh: Double, deep: Int = 0xA24E18, seed: Double = 0.0): DoubleArray {
         val ph = sw * 0.30
-        val k = floor(y / ph)
-        val v = (y - k * ph) / ph
+        val k0 = floor(y / ph)
+        val v = (y - k0 * ph) / ph
+        val k = k0 + seed  // only used for per-plank randomness
         fun rnd(a: Double, b: Double) = fract(sin(a * 127.1 + b * 311.7) * 43758.5453)
         val r1 = rnd(k, 1.0); val r2 = rnd(k, 2.0); val r3 = rnd(k, 3.0)
         val xs = x / sw
@@ -175,9 +176,8 @@ object MaterialArt {
         val band = smooth(0.10, 0.50, ring) * (1.0 - smooth(0.58, 1.0, ring))
         val fine = 1.0 - smooth(0.0, 0.07, fract(t * 4.0 + 0.37))
         val light = rgb(w.a); val mid = rgb(w.b); val line = rgb(w.c)
-        val deep = rgb(0xA24E18)
         var c = mix(mid, light, 0.10 + 0.90 * band)
-        c = mix(c, deep, 0.55 * smooth(0.40, 0.78, fbm(xs * 1.3 + k * 1.3, v * 0.9 + k)))
+        c = mix(c, rgb(deep), 0.55 * smooth(0.40, 0.78, fbm(xs * 1.3 + k * 1.3, v * 0.9 + k)))
         c = mix(c, line, late * 0.70)
         c = mix(c, line, fine * 0.24)
         // fine fibres along the plank
@@ -388,6 +388,25 @@ object MaterialArt {
         val vx = ux - 0.5; val vy = (uy - 0.45) * 1.1
         val vig = 0.80 + 0.20 * smooth(1.25, 0.25, sqrt(vx * vx + vy * vy))
         return DoubleArray(3) { c[it] * vig }
+    }
+
+    /** Renders a full image pixel by pixel and saves it as a JPEG. */
+    internal fun renderJpg(f: File, width: Int, height: Int, quality: Float, px: (Double, Double) -> DoubleArray) {
+        val img = BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until height) for (x in 0 until width) {
+            val c = px(x + 0.5, y + 0.5)
+            val r = (c[0].coerceIn(0.0, 1.0) * 255).toInt(); val g = (c[1].coerceIn(0.0, 1.0) * 255).toInt(); val b = (c[2].coerceIn(0.0, 1.0) * 255).toInt()
+            img.setRGB(x, y, (r shl 16) or (g shl 8) or b)
+        }
+        val writer = ImageIO.getImageWritersByFormatName("jpg").next()
+        f.delete()
+        ImageIO.createImageOutputStream(f).use { out ->
+            writer.output = out
+            val p = writer.defaultWriteParam.apply { compressionMode = ImageWriteParam.MODE_EXPLICIT; compressionQuality = quality }
+            writer.write(null, IIOImage(img, null, null), p)
+        }
+        writer.dispose()
+        println("  ${f.path}  ${f.length() / 1024} KB")
     }
 
     /** Side-by-side comparison of candidate woods for world 1, with a mock carved maze on each. */

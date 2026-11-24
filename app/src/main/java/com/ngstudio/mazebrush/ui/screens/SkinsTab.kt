@@ -133,7 +133,7 @@ fun SkinsTab() {
     }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-        EngravedText("SKINS", 34.sp, WorldTheme.forLevel(store.currentLevel).ink.color(), Modifier.align(Alignment.CenterHorizontally))
+        EngravedText("SKINS", 34.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color(), Modifier.align(Alignment.CenterHorizontally))
         VSpace(6.dp)
         Box {
             SkinPreview(
@@ -160,7 +160,7 @@ fun SkinsTab() {
                 }
             }
         }
-        if (noMoney) BodyText("Not enough coins - play levels to earn more!", Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp), color = WorldTheme.forLevel(store.currentLevel).ink.color(), size = 14.sp)
+        if (noMoney) BodyText("Not enough coins - play levels to earn more!", Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp), color = com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color(), size = 14.sp)
         VSpace(8.dp)
         Row(
             Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(20.dp)).background(Pro.glass, RoundedCornerShape(20.dp)).padding(4.dp),
@@ -342,7 +342,7 @@ private fun SkinPreview(modifier: Modifier, ball: Int, trail: Int, finish: Int) 
         val theme = WorldTheme.ALL[0]
         renderer.setSafeArea(0f, 0f)
         while (true) {
-            renderer.setScene(SceneConfig(previewLevel, 1, theme, BallSkin.byId(ball), TrailStyle.byId(trail), PaintFinish.byId(finish), theme.paintFor(2), theme.paintFor(4), instant = true))
+            renderer.setScene(SceneConfig(previewLevel, 1, theme, BallSkin.byId(ball), TrailStyle.byId(trail), PaintFinish.byId(finish), theme.paintFor(2), theme.paintFor(4), instant = true, backdrop = com.ngstudio.mazebrush.ui.components.currentBackdrop()))
             delay(350)
             var pos = previewLevel.start
             for (d in listOf(Dir.RIGHT, Dir.DOWN, Dir.LEFT, Dir.UP)) {

@@ -74,7 +74,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     val pager = rememberPagerState { pages.size }
     val scope = rememberCoroutineScope()
     BackHandler(pager.currentPage > 0) { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }
-    SurfaceBackground(WorldTheme.ALL[0]) {
+    SurfaceBackground(com.ngstudio.mazebrush.render.Backdrop.ALL[0]) {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             VSpace(20.dp)
             EngravedText("MAZE BRUSH", 32.sp, WorldTheme.ALL[0].ink.color())

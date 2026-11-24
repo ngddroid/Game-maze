@@ -32,6 +32,9 @@ import androidx.compose.ui.graphics.Brush
 import com.ngstudio.mazebrush.ui.components.WorldBadge
 import com.ngstudio.mazebrush.ui.components.BottomLeaves
 import com.ngstudio.mazebrush.ui.components.TopLeaves
+import com.ngstudio.mazebrush.ui.components.TopDecor
+import com.ngstudio.mazebrush.ui.components.BottomDecor
+import com.ngstudio.mazebrush.ui.components.AmbientDecor
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
@@ -209,6 +212,9 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
     val theme = remember(levelNumber) {
         if (mode is PlayMode.Daily) WorldTheme.ALL[(mode.day % WorldTheme.ALL.size).toInt()] else WorldTheme.forLevel(levelNumber)
     }
+    // the chapter's wood behind the board; the Daily uses the player's current chapter
+    val backdrop = if (mode is PlayMode.Daily) com.ngstudio.mazebrush.ui.components.currentBackdrop()
+        else com.ngstudio.mazebrush.ui.components.backdropForLevel(levelNumber)
     var paused by remember { mutableStateOf(false) }
     var win by remember { mutableStateOf<WinInfo?>(null) }
     var winVisible by remember { mutableStateOf(false) }
@@ -290,6 +296,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
             SceneConfig(
                 level, levelNumber, theme, BallSkin.byId(store.ballSkin), TrailStyle.byId(store.trail), PaintFinish.byId(store.finish),
                 theme.paintFor(if (isDaily) 3 else levelNumber), theme.paintFor((if (isDaily) 3 else levelNumber) + 2),
+                backdrop = backdrop,
             )
         )
         sound.whoosh()
@@ -379,10 +386,11 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
         onHome()
     }
 
+    androidx.compose.runtime.CompositionLocalProvider(com.ngstudio.mazebrush.ui.components.LocalBackdrop provides backdrop) {
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { ctx -> GameGLView(ctx, renderer).also { glView[0] = it } }, modifier = Modifier.fillMaxSize())
-        TopLeaves()
-        BottomLeaves()
+        TopDecor()
+        BottomDecor()
 
         // swipe input
         Box(
@@ -413,7 +421,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
                 RoundButton(Icon.PAUSE, size = 48.dp) { paused = true }
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        EngravedText(if (isDaily) "DAILY" else "LEVEL $levelNumber", 34.sp, theme.ink.color())
+                        EngravedText(if (isDaily) "DAILY" else "LEVEL $levelNumber", 34.sp, backdrop.ink.color())
                         WorldBadge(
                             if (isDaily) "DAILY CHALLENGE" else "WORLD ${WorldTheme.worldIndexOf(levelNumber) + 1}  •  ${theme.name.uppercase()}",
                             theme.accentDark.color(), small = true,
@@ -427,7 +435,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
                 PaintProgressBar(controller.progress, theme.paintFor(if (isDaily) 3 else levelNumber).color(), Modifier.weight(1f))
                 HSpace(10.dp)
                 val left = controller.movesLeft
-                if (left == null) EngravedText("${(controller.progress * 100).toInt()}%", 18.sp, theme.ink.color())
+                if (left == null) EngravedText("${(controller.progress * 100).toInt()}%", 18.sp, backdrop.ink.color())
                 else MovesPill(left)
             }
             VSpace(6.dp)
@@ -439,7 +447,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
                     StarIcon(lit, size = 18.dp, modifier = Modifier.alpha(if (lit) 1f else 0.7f))
                 }
                 HSpace(8.dp)
-                BodyText(if (controller.limit == null) "Moves $m  ·  Par $par" else "Par $par  ·  ${controller.tilesLeft} tiles left", size = 15.sp, color = theme.ink.color())
+                BodyText(if (controller.limit == null) "Moves $m  ·  Par $par" else "Par $par  ·  ${controller.tilesLeft} tiles left", size = 15.sp, color = backdrop.ink.color())
             }
         }
 
@@ -522,6 +530,7 @@ fun GameScreen(mode: PlayMode, onHome: () -> Unit) {
                 if (flight === f) flight = null
             }
         }
+    }
     }
 }
 

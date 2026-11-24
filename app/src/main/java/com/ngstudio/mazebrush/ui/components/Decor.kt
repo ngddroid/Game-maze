@@ -63,11 +63,10 @@ private val LEAVES = listOf(
     Leaf(0.06f, 0.02f, 58f, 0.56f, 0.12f, 1.0f),
 )
 
-private val LEAF_DARK = Color(0xFF2F6E1C)
-private val LEAF_MID = Color(0xFF4E9E2C)
-private val LEAF_LIGHT = Color(0xFF8BD14A)
+private class LeafColors(val dark: Color, val mid: Color, val light: Color)
+private val GREEN_LEAVES = LeafColors(Color(0xFF2F6E1C), Color(0xFF4E9E2C), Color(0xFF8BD14A))
 
-private fun DrawScope.leaf(l: Leaf) {
+private fun DrawScope.leaf(l: Leaf, k: LeafColors) {
     val s = size.minDimension
     val len = l.len * s; val w = l.w * s
     val path = Path().apply {
@@ -76,8 +75,8 @@ private fun DrawScope.leaf(l: Leaf) {
         cubicTo(len * 0.70f, w * 0.95f, len * 0.25f, w * 1.1f, 0f, 0f)
         close()
     }
-    val base = lerp(LEAF_DARK, LEAF_MID, l.shade)
-    val tip = lerp(LEAF_MID, LEAF_LIGHT, l.shade)
+    val base = lerp(k.dark, k.mid, l.shade)
+    val tip = lerp(k.mid, k.light, l.shade)
     translate(l.x * size.width, l.y * size.height) {
         rotate(l.deg, Offset.Zero) {
             translate(3f, 5f) { drawPath(path, Color.Black.copy(alpha = 0.16f)) }
@@ -104,9 +103,10 @@ fun LeafCluster(modifier: Modifier = Modifier, size: Dp = 130.dp, flipX: Boolean
     val sway by rememberInfiniteTransition(label = "leaves").animateFloat(
         -1.6f, 1.6f, infiniteRepeatable(tween(3200 + phase * 400, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "sway",
     )
+    val k = GREEN_LEAVES
     Canvas(modifier.size(size)) {
         scale(if (flipX) -1f else 1f, if (flipY) -1f else 1f) {
-            rotate(sway, Offset.Zero) { for (l in LEAVES) leaf(l) }
+            rotate(sway, Offset.Zero) { for (l in LEAVES) leaf(l, k) }
         }
     }
 }
