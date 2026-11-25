@@ -23,27 +23,27 @@ import kotlin.math.sign
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-private const val GHOSTS = 3
+/** How far the comet streak trails behind the ball, in seconds of travel; it shrinks into the ball after a stop. */
+private const val STREAK_LAG = 0.11f
+/** The paint floods in this long after the ball has passed a cell; a cell fills at the ball's speed, at most [FLOOD_DUR]. */
+private const val FLOOD_DELAY = 0.03f
+private const val FLOOD_DUR = 0.09f
+private const val TRAIL_MAX = 64
 private const val WIN_WAVE_START = 0.05f
 private const val WIN_WAVE_END = 0.85f
 private const val WIN_PANEL_AT = 1.25f
 /** Share of the slide spent accelerating from rest; the rest is at full speed. */
-private const val LAUNCH = 0.22f
+private const val LAUNCH = 0.12f
 private const val V_PEAK = 1f / (1f - LAUNCH / 2f)
 /** Fraction of the slide covered at time fraction [u]. */
 private fun slideEase(u: Float) = if (u < LAUNCH) V_PEAK * u * u / (2f * LAUNCH) else V_PEAK * (u - LAUNCH / 2f)
 /** d(slideEase)/du. */
 private fun slideVel(u: Float) = if (u < LAUNCH) V_PEAK * u / LAUNCH else V_PEAK
 
-private val RICH_FLOOR_A = Rgb(0x5A2A10)
-private val RICH_FLOOR_B = Rgb(0x3E1C09)
-
-private val SURFACE_RES = intArrayOf(
-    com.ngstudio.mazebrush.R.drawable.surface_0, com.ngstudio.mazebrush.R.drawable.surface_1, com.ngstudio.mazebrush.R.drawable.surface_2,
-    com.ngstudio.mazebrush.R.drawable.surface_3, com.ngstudio.mazebrush.R.drawable.surface_4, com.ngstudio.mazebrush.R.drawable.surface_5,
-    com.ngstudio.mazebrush.R.drawable.surface_6, com.ngstudio.mazebrush.R.drawable.surface_7, com.ngstudio.mazebrush.R.drawable.surface_8,
-    com.ngstudio.mazebrush.R.drawable.surface_9,
-)
+/** The slab's front lip, in cells. */
+private const val SIDE_DEPTH = 0.16f
+/** Slab margin around the outer paths, in cells (Shaders.BAKE_FS RIM). */
+private const val SLAB_RIM = 0.30f
 
 class SceneConfig(
     val level: Level,
@@ -56,8 +56,8 @@ class SceneConfig(
     val paint2: Rgb,
     /** Skip the drop-in animation (used for previews). */
     val instant: Boolean = false,
-    /** The chapter's wood behind the board (the board itself keeps the world's material). */
-    val backdrop: Backdrop = Backdrop.ALL[0],
+    /** Board colours (unpainted top, side walls); the paint colours come from [paint]/[paint2]. */
+    val board: BoardTheme = BoardTheme.ALL[0],
 )
 
 /** Called on the main thread. */
@@ -93,6 +93,14 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     fun showHint(cells: IntArray, dir: Dir) = commands.add(Runnable { hintCells = cells; hintDir = dir.ordinal; hintT = 0f })
     fun clearHint() = commands.add(Runnable { hintCells = null })
     fun playWin() = commands.add(Runnable { startWin() })
+    /** Recolours the board (theme picker) without restarting the level: paint progress is kept. */
+    /** Change the ball, trail, paint and board mid-level (the skin sheet's live preview) without losing paint. */
+    fun setLook(skin: BallSkin, trail: TrailStyle, finish: PaintFinish, b: BoardTheme, paint: Rgb, paint2: Rgb) = commands.add(Runnable {
+        val c = cfg ?: return@Runnable
+        cfg = SceneConfig(c.level, c.levelNumber, c.theme, skin, trail, finish, paint, paint2, c.instant, b)
+        if (c.board !== b) needsBake = true
+    })
+
     fun setSafeArea(topPx: Float, bottomPx: Float) = commands.add(Runnable {
         safeTop = topPx; safeBottom = bottomPx
         cfg?.let { if (layoutFor(it.level)) needsBake = true }
@@ -100,13 +108,23 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     /** Re-paint the given cells instantly (restore after restart/resume). */
     fun setPainted(cells: IntArray) = commands.add(Runnable {
         val l = level ?: return@Runnable
-        for (i in 0 until l.size) if (l.isFloor(i)) { paint[i * 4] = 0f }
-        for (c in cells) { paint[c * 4] = 1f; paint[c * 4 + 1] = 4f; paint[c * 4 + 2] = now - 5f }
-        fills.clear(); paintDirty = true
+        for (i in 0 until l.size) if (l.isFloor(i)) { paint[i * 4] = 0f; paint[i * 4 + 1] = 0f }
+        val set = cells.toHashSet()
+        for (c in cells) {
+            // round cap plus a bar towards every painted neighbour, so restored paint reads as connected strokes
+            val x = l.x(c); val y = l.y(c)
+            var arms = 16
+            if (y > 0 && (c - l.width) in set) arms = arms or 1
+            if (x < l.width - 1 && (c + 1) in set) arms = arms or 2
+            if (y < l.height - 1 && (c + l.width) in set) arms = arms or 4
+            if (x > 0 && (c - 1) in set) arms = arms or 8
+            paint[c * 4] = 0f; paint[c * 4 + 1] = arms.toFloat(); paint[c * 4 + 2] = now - 5f
+        }
+        fills.clear(); armAdds.clear(); moveHistory.clear(); curMove = null; paintDirty = true
     })
     fun setBallCell(cell: Int) = commands.add(Runnable {
         val l = level ?: return@Runnable
-        ballX = l.x(cell) + 0.5f; ballY = l.y(cell) + 0.5f; moving = false
+        ballX = l.x(cell) + 0.5f; ballY = l.y(cell) + 0.5f; moving = false; trailN = 0
     })
 
     // ------------------------------------------------------------------ GL state
@@ -151,21 +169,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     private var bakeY = 0f
     private var bakeW = 1
     private var bakeH = 1
-    private var surfaceTex = 0
-    private var backdropTex = 0
-    private var backdropRes = 0
-    private var bdW = 1f
-    private var bdH = 1f
-    private var woodTex = 0
-    private var woodW = 1f
-    private var woodH = 1f
     private val dp = com.ngstudio.mazebrush.MazeApp.instance.resources.displayMetrics.density
-    // card and wood slab around the grid, in screen pixels
-    private var cardX = 0f; private var cardY = 0f; private var cardW = 0f; private var cardH = 0f
-    private var slabX = 0f; private var slabY = 0f; private var slabW = 0f; private var slabH = 0f
-    private var surfaceTheme: WorldTheme? = null
-    private var surfW = 1f
-    private var surfH = 1f
     private var bakeColor: RenderTarget? = null
     private var bakeMask: RenderTarget? = null
     private var needsBake = false
@@ -179,6 +183,20 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
 
     private class Fill(val cell: Int, val start: Float, val dur: Float, val from: Float, val to: Float)
     private val fills = ArrayList<Fill>()
+    /*
+     * Paint is drawn like a round brush stroke (Shaders.PAINT_FS paintSD). Per cell (RGBA32F):
+     *  x = tip of the entry stroke (0..1; 1 = its round cap is centred on the cell),
+     *  y = -1 for walls, else arms (bits N1 E2 S4 W8, DISC16: a cell-wide bar from the centre to that edge,
+     *      or the round cap) + 32 * entry (0 none, 1..4 = the ball came in moving N/E/S/W, 5 = round spot),
+     *  z = time the paint arrived (wet sheen), w = paint order (rainbow finish).
+     * A ball that stops leaves a round end; passing straight on adds the exit arm (full cell); a turn adds
+     * a different exit arm (rounded corner).
+     */
+    private class ArmAdd(val time: Float, val cell: Int, val bits: Int)
+    private val armAdds = ArrayList<ArmAdd>()
+    /** Per forward move: the cells whose code changed and their code before it, so undo restores them exactly. */
+    private val moveHistory = ArrayDeque<HashMap<Int, Float>>()
+    private var curMove: HashMap<Int, Float>? = null
 
     // ball
     private var ballX = 0f
@@ -191,10 +209,12 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     private var impactDx = 0f
     private var impactDy = 0f
     private var stretch = 0f                       // smoothed speed stretch (0..~0.14)
-    // recent ball positions (one per frame while sliding) for the motion-blur ghosts
-    private val ghostX = FloatArray(GHOSTS + 1)
-    private val ghostY = FloatArray(GHOSTS + 1)
-    private var ghostN = 0
+    // ball positions with timestamps while sliding: the comet streak runs from (now - STREAK_LAG) to the ball
+    private val trailT = FloatArray(TRAIL_MAX)
+    private val trailX = FloatArray(TRAIL_MAX)
+    private val trailY = FloatArray(TRAIL_MAX)
+    private var trailN = 0
+    private lateinit var pStreak: Prog
 
     // movement
     private class Step(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val jump: Boolean, val cell: Int, val dir: Int, val fromCell: Int)
@@ -242,6 +262,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         pShadow = Prog(GlUtil.program(Shaders.QUAD_VS, Shaders.SHADOW_FS))
         pHint = Prog(GlUtil.program(Shaders.QUAD_VS, Shaders.HINT_FS))
         pParticle = Prog(GlUtil.program(Shaders.PARTICLE_VS, Shaders.PARTICLE_FS))
+        pStreak = Prog(GlUtil.program(Shaders.QUAD_VS, Shaders.STREAK_FS))
 
         val b = IntArray(1)
         GLES30.glGenBuffers(1, b, 0); quadVbo = b[0]
@@ -257,9 +278,36 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         ambient.initGl(quadVbo); boardFx.initGl(quadVbo); screenFx.initGl(quadVbo)
 
         // Context was (re)created: GPU resources must be rebuilt.
-        bakeColor = null; bakeMask = null; gridTex = 0; paintTex = 0; surfaceTex = 0; woodTex = 0; surfaceTheme = null; backdropTex = 0; backdropRes = 0
+        bakeColor = null; bakeMask = null; gridTex = 0; paintTex = 0
+        ballTex.clear()
         if (cfg != null) needsBake = true
         lastNanos = System.nanoTime()
+    }
+
+    /** Ball skin textures (assets/balls/tex_<id>.png), uploaded on first use; alpha (glow) kept straight, not premultiplied. */
+    private val ballTex = HashMap<Int, Int>()
+    private fun ballTexture(id: Int): Int = ballTex.getOrPut(id) {
+        val opts = android.graphics.BitmapFactory.Options().apply { inPremultiplied = false; inScaled = false }
+        val bmp = runCatching {
+            com.ngstudio.mazebrush.MazeApp.instance.assets.open("balls/tex_$id.png").use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+        }.getOrNull() ?: return@getOrPut 0
+        val bw = bmp.width; val bh = bmp.height
+        val px = IntArray(bw * bh)
+        bmp.getPixels(px, 0, bw, 0, 0, bw, bh); bmp.recycle()
+        val buf = GlUtil.byteBuffer(bw * bh * 4)
+        for (p in px) { buf.put((p shr 16).toByte()); buf.put((p shr 8).toByte()); buf.put(p.toByte()); buf.put((p ushr 24).toByte()) }
+        buf.position(0)
+        val t = GlUtil.genTexture()
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE3)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, t)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, bw, bh, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buf)
+        GLES30.glGenerateMipmap(GLES30.GL_TEXTURE_2D)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_REPEAT)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        t
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -271,7 +319,8 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
 
     override fun onDrawFrame(gl: GL10?) {
         val t = System.nanoTime()
-        val dt = ((t - lastNanos) / 1e9f).coerceIn(0f, 1f / 20f)
+        val dt = ((t - lastNanos) / 1e9f).coerceIn(0f, 1f / 20f) *
+            (if (com.ngstudio.mazebrush.BuildConfig.DEBUG) com.ngstudio.mazebrush.game.DebugFlags.timeScale else 1f)
         lastNanos = t
         now += dt
         while (true) commands.poll()?.run() ?: break
@@ -306,13 +355,13 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         paint = FloatArray(l.size * 4)
         for (i in 0 until l.size) {
             paint[i * 4] = 0f
-            paint[i * 4 + 1] = if (l.isFloor(i)) 4f else -1f
+            paint[i * 4 + 1] = if (l.isFloor(i)) 0f else -1f
             paint[i * 4 + 2] = -10f
             paint[i * 4 + 3] = 0f
         }
         paintOrder = 0f
         paintBuf = GlUtil.floatBuffer(l.size * 4)
-        fills.clear()
+        fills.clear(); armAdds.clear(); moveHistory.clear(); curMove = null
         specials.clear()
         for (i in 0 until l.size) {
             val tile = l.tile(i)
@@ -336,12 +385,13 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         ballX = l.x(l.start) + 0.5f; ballY = l.y(l.start) + 0.5f
         rot.fill(0f); rot[0] = 1f; rot[4] = 1f; rot[8] = 1f
         moving = false; steps.clear(); hintCells = null; winT = -1f; winShownSent = true
+        trailN = 0   // no comet streak left over from the previous level
         boardFx.clear()
         needsBake = true
         paintDirty = true
         if (c.instant) {
             introT = -1f; introDoneSent = true; ballScale = 1f; ballLanded = true
-            startFill(l.start, 4f, 0.01f)
+            setCode(l.start, 0, 5); startFill(l.start, 0.01f)
         } else {
             introT = 0f; introDoneSent = false; ballScale = 0f; ballLanded = false
         }
@@ -354,51 +404,70 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         return 0
     }
 
-    /** Fits the island between the HUD areas. Returns true when the layout changed. */
+    /** Fits the board (paths + slab rim + lip) between the HUD areas. Returns true when the layout changed. */
     private fun layoutFor(l: Level): Boolean {
-        // grid -> wood slab (slabM cells) -> cream card with gold rim (cardPad) -> drop shadow (shadowPad)
-        val slabM = 0.55f
-        val cardPad = 14f * dp
-        val shadowPad = 18f * dp
-        val padX = w * 0.035f
-        val availW = w - padX * 2 - cardPad * 2
-        val top = safeTop + h * 0.012f + cardPad
-        val availH = (h - safeBottom - h * 0.012f - cardPad) - top
-        var cs = min(availW / (l.width + slabM * 2), availH / (l.height + slabM * 2))
+        val padX = w * 0.04f
+        val availW = w - padX * 2
+        val top = safeTop + h * 0.015f
+        val availH = (h - safeBottom - h * 0.015f) - top
+        var cs = min(availW / (l.width + SLAB_RIM * 2), availH / (l.height + SLAB_RIM * 2 + SIDE_DEPTH))
         cs = min(cs, w / 6.6f)
         val gw = l.width * cs; val gh = l.height * cs
         val nx = (w - gw) / 2f
-        val ny = top + (availH - gh) / 2f
+        val ny = top + (availH - gh - SIDE_DEPTH * cs) / 2f
         val changed = abs(cs - cellPx) > 0.5f || abs(nx - gridX) > 0.5f || abs(ny - gridY) > 0.5f
         cellPx = cs; gridX = nx; gridY = ny
-        slabX = gridX - slabM * cs; slabY = gridY - slabM * cs
-        slabW = gw + 2 * slabM * cs; slabH = gh + 2 * slabM * cs
-        cardX = slabX - cardPad; cardY = slabY - cardPad
-        cardW = slabW + 2 * cardPad; cardH = slabH + 2 * cardPad
-        bakeX = (cardX - shadowPad).toInt().toFloat()
-        bakeY = (cardY - shadowPad).toInt().toFloat()
-        bakeW = (cardW + 2 * shadowPad).toInt().coerceAtLeast(8)
-        bakeH = (cardH + 2 * shadowPad).toInt().coerceAtLeast(8)
+        val padSide = (SLAB_RIM + 0.5f) * cs; val padTop = (SLAB_RIM + 0.3f) * cs; val padBottom = (SLAB_RIM + SIDE_DEPTH + 0.9f) * cs
+        bakeX = (gridX - padSide).toInt().toFloat()
+        bakeY = (gridY - padTop).toInt().toFloat()
+        bakeW = (gw + 2 * padSide + 2).toInt().coerceAtLeast(8)
+        bakeH = (gh + padTop + padBottom + 2).toInt().coerceAtLeast(8)
         return changed
+    }
+
+    /**
+     * Corner bits for Shaders.BAKE_FS shapeSD, corners k = 0 (+x,+y), 1 (+x,-y), 2 (-x,+y), 3 (-x,-y):
+     * an inside cell gets bit k when neither neighbour towards that corner is inside (round it off);
+     * an outside cell gets bit 4+k when the three cells around that corner are all inside (fillet it);
+     * an inside cell gets bit 4+k when the three other cells around that corner are inside too (no seam there).
+     */
+    private fun cornerBits(wd: Int, ht: Int, inside: BooleanArray): IntArray {
+        fun at(x: Int, y: Int) = x in 0 until wd && y in 0 until ht && inside[y * wd + x]
+        val sx = intArrayOf(1, 1, -1, -1); val sy = intArrayOf(1, -1, 1, -1)
+        return IntArray(wd * ht) { i ->
+            val x = i % wd; val y = i / wd
+            var bits = 0
+            for (k in 0 until 4) {
+                val a = at(x + sx[k], y); val b = at(x, y + sy[k]); val d = at(x + sx[k], y + sy[k])
+                if (inside[i]) { if (!a && !b) bits = bits or (1 shl k); if (a && b && d) bits = bits or (16 shl k) }
+                else if (a && b && d) bits = bits or (16 shl k)
+            }
+            bits
+        }
     }
 
     private fun bake() {
         val c = cfg ?: return
         val l = level ?: return
         needsBake = false
-        // load first: binding the new texture would otherwise replace the grid texture on unit 0
-        if (surfaceTex == 0 || surfaceTheme !== c.theme) loadSurface(c.theme)
-        if (woodTex == 0) loadWood()
         bakeColor?.release(); bakeMask?.release()
         GlUtil.deleteTexture(gridTex); GlUtil.deleteTexture(paintTex)
 
         gridTex = GlUtil.genTexture()
         GlUtil.nearest(gridTex)
-        val bytes = ByteBuffer.allocateDirect(l.size)
-        for (i in 0 until l.size) bytes.put(if (l.isFloor(i)) 255.toByte() else 0)
+        val floor = BooleanArray(l.size) { l.isFloor(it) }
+        val fBits = cornerBits(l.width, l.height, floor)
+        fun fl(x: Int, y: Int) = x in 0 until l.width && y in 0 until l.height && floor[y * l.width + x]
+        val bytes = ByteBuffer.allocateDirect(l.size * 4)
+        for (i in 0 until l.size) {
+            val x = l.x(i); val y = l.y(i)
+            val nb = (if (fl(x + 1, y)) 1 else 0) or (if (fl(x - 1, y)) 2 else 0) or (if (fl(x, y + 1)) 4 else 0) or (if (fl(x, y - 1)) 8 else 0)
+            bytes.put(if (floor[i]) 255.toByte() else 0); bytes.put(0)
+            bytes.put(fBits[i].toByte()); bytes.put(nb.toByte())
+        }
         bytes.position(0)
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, l.width, l.height, 0, GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, bytes)
+        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA8, l.width, l.height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, bytes)
         GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
 
         paintTex = GlUtil.genTexture()
@@ -423,82 +492,17 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
             GLES30.glUniform1f(pBake.u("uCell"), cellPx)
             GLES30.glUniform2f(pBake.u("uOrigin"), gridX - bakeX, gridY - bakeY)
             GLES30.glUniform1i(pBake.u("uMode"), mode)
-            GLES30.glUniform2f(pBake.u("uBakeOrigin"), bakeX, bakeY)
-            surfaceUniforms(pBake, 1)
-            val rich = c.theme.index == 0
-            GLES30.glActiveTexture(GLES30.GL_TEXTURE2)
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, woodTex)
-            GLES30.glUniform1i(pBake.u("uWood"), 2)
-            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-            GLES30.glUniform1i(pBake.u("uWoodOn"), if (rich) 1 else 0)
-            val ws = max(slabW / woodW, slabH / woodH)
-            GLES30.glUniform2f(pBake.u("uWoodOffset"), (woodW * ws - slabW) / 2f, (woodH * ws - slabH) / 2f)
-            GLES30.glUniform2f(pBake.u("uWoodSize"), woodW * ws, woodH * ws)
-            GLES30.glUniform4f(pBake.u("uCard"), cardX - bakeX, cardY - bakeY, cardW, cardH)
-            GLES30.glUniform4f(pBake.u("uSlab"), slabX - bakeX, slabY - bakeY, slabW, slabH)
-            GLES30.glUniform1f(pBake.u("uDp"), dp)
-            if (rich) { col3(pBake, "uFloorA", RICH_FLOOR_A); col3(pBake, "uFloorB", RICH_FLOOR_B) }
-            else { col3(pBake, "uFloorA", c.theme.floorA); col3(pBake, "uFloorB", c.theme.floorB) }
+            GLES30.glUniform1f(pBake.u("uDepth"), SIDE_DEPTH)
+            col3(pBake, "uFloor", c.board.floor)
+            col3(pBake, "uSideTop", c.board.sideTop)
+            col3(pBake, "uSideBottom", c.board.sideBottom)
+            GLES30.glUniform1i(pBake.u("uPattern"), c.board.pattern)
             drawQuad()
         }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, w.toInt(), h.toInt())
         bakeColor = color; bakeMask = mask
         GlUtil.check("bake")
-    }
-
-    /** The polished teak the world-1 board is carved into (same image as the Home card preview). */
-    private fun loadWood() {
-        val opts = android.graphics.BitmapFactory.Options().apply { inScaled = false }
-        val bmp = android.graphics.BitmapFactory.decodeResource(com.ngstudio.mazebrush.MazeApp.instance.resources, com.ngstudio.mazebrush.R.drawable.board_wood, opts)
-        woodTex = GlUtil.genTexture()
-        GlUtil.linear(woodTex)
-        android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bmp, 0)
-        woodW = bmp.width.toFloat(); woodH = bmp.height.toFloat()
-        bmp.recycle()
-        GlUtil.check("wood")
-    }
-
-    /** Loads the world's surface image (same picture as the menus) as a GL texture. */
-    private fun loadSurface(th: WorldTheme) {
-        GlUtil.deleteTexture(surfaceTex)
-        val res = SURFACE_RES[th.index % SURFACE_RES.size]
-        val opts = android.graphics.BitmapFactory.Options().apply { inScaled = false }
-        val bmp = android.graphics.BitmapFactory.decodeResource(com.ngstudio.mazebrush.MazeApp.instance.resources, res, opts)
-        surfaceTex = GlUtil.genTexture()
-        GlUtil.linear(surfaceTex)
-        android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bmp, 0)
-        surfW = bmp.width.toFloat(); surfH = bmp.height.toFloat()
-        bmp.recycle()
-        surfaceTheme = th
-        GlUtil.check("surface")
-    }
-
-    /** Loads the chapter's background wood (same picture as the menus) as a GL texture. */
-    private fun loadBackdrop(b: Backdrop) {
-        GlUtil.deleteTexture(backdropTex)
-        val opts = android.graphics.BitmapFactory.Options().apply { inScaled = false }
-        val bmp = android.graphics.BitmapFactory.decodeResource(com.ngstudio.mazebrush.MazeApp.instance.resources, b.res, opts)
-        backdropTex = GlUtil.genTexture()
-        GlUtil.linear(backdropTex)
-        android.opengl.GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, bmp, 0)
-        bdW = bmp.width.toFloat(); bdH = bmp.height.toFloat()
-        bmp.recycle()
-        backdropRes = b.res
-        GlUtil.check("backdrop")
-    }
-
-    /** Centre-crop mapping of the surface image (or [tex], e.g. the backdrop) onto the screen. */
-    private fun surfaceUniforms(p: Prog, unit: Int, tex: Int = surfaceTex, texW: Float = surfW, texH: Float = surfH) {
-        val scale = max(w / texW, h / texH)
-        val dw = texW * scale; val dh = texH * scale
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + unit)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, tex)
-        GLES30.glUniform1i(p.u("uSurface"), unit)
-        GLES30.glUniform2f(p.u("uSurfOffset"), (dw - w) / 2f, (dh - h) / 2f)
-        GLES30.glUniform2f(p.u("uSurfSize"), dw, dh)
-        GLES30.glUniform2f(p.u("uRealScreen"), w, h)
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }
 
     private fun uploadPaint() {
@@ -531,11 +535,11 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         if (steps.isEmpty()) return
         stepIdx = 0; stepProg = 0f; stepTriggered = false
         slideD = steps.count { !it.jump }.toFloat()
-        // longer slides are faster, so every swipe feels snappy: 1 cell ~0.21 s, 9 cells ~0.45 s, 16 cells ~0.57 s
-        slideT = (0.09f + 0.12f * sqrt(slideD.coerceAtLeast(1f))) * (if (undo) 0.6f else 1f)
+        // a quick dash, like the genre's best: 1 cell ~0.06 s, 8 cells ~0.16 s, 16 cells ~0.27 s
+        slideT = (0.045f + 0.014f * slideD.coerceAtLeast(1f)) * (if (undo) 0.8f else 1f)
         slideClock = 0f; traveled = 0f
         speed = 0f
-        ghostN = 0
+        trailN = 0
         moving = true
         undoMode = undo
         unpaintSet = unpaint
@@ -543,6 +547,25 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         paintedInMove = 0
         hintCells = null
         ballX = l.x(from) + 0.5f; ballY = l.y(from) + 0.5f
+        if (!undo) {
+            pushTrail()
+            curMove = HashMap<Int, Float>().also { moveHistory.addLast(it); if (moveHistory.size > 200) moveHistory.removeFirst() }
+        } else {
+            curMove = null
+            // put back every cell code the undone move changed (its newly painted cells are wiped below)
+            armAdds.clear()
+            moveHistory.removeLastOrNull()?.forEach { (cell, code) ->
+                if (unpaint?.contains(cell) != true) { paint[cell * 4 + 1] = code; paintDirty = true }
+            }
+        }
+    }
+
+    private fun pushTrail() {
+        if (trailN == TRAIL_MAX) {
+            System.arraycopy(trailT, 1, trailT, 0, TRAIL_MAX - 1); System.arraycopy(trailX, 1, trailX, 0, TRAIL_MAX - 1); System.arraycopy(trailY, 1, trailY, 0, TRAIL_MAX - 1)
+            trailN--
+        }
+        trailT[trailN] = now; trailX[trailN] = ballX; trailY[trailN] = ballY; trailN++
     }
 
     private fun updateMove(dt: Float) {
@@ -556,7 +579,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
                 stepProg += use / jumpDur
                 remaining -= use
                 if (remaining < 1e-5f) remaining = 0f
-                ghostN = 0
+                trailN = 0
                 if (stepProg < 0.5f) {
                     ballX = s.x0; ballY = s.y0; ballScale = 1f - stepProg * 2f
                 } else {
@@ -597,22 +620,37 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         val l = level ?: return
         if (undoMode) {
             val leaving = s.fromCell
-            if (unpaintSet?.contains(leaving) == true) startFill(leaving, paint[leaving * 4 + 1], 0.14f, to = 0f)
+            if (unpaintSet?.contains(leaving) == true) wipe(leaving)
             return
         }
         val c = s.cell
-        if (paint[c * 4] < 1f && !isFilling(c)) {
-            val dur = (1.05f / max(speed, 4f)).coerceIn(0.05f, 0.2f)
+        // the cell the ball just left gets a bar out to the edge it left through
+        if (s.dir in 0..3) addArms(s.fromCell, armBit(s.dir), FLOOD_DELAY)
+        if (isPainted(c)) {
+            // passing through old paint: its entry side plus the round centre
+            val back = if (s.dir in 0..3) armBit((s.dir + 2) % 4) else 0
+            addArms(c, back or 16, FLOOD_DELAY)
+        } else {
             paintOrder += 1f
             paint[c * 4 + 3] = paintOrder
-            startFill(c, s.dir.toFloat(), dur)
+            setCode(c, 0, if (s.dir in 0..3) s.dir + 1 else 5)
+            // the paint floods in just behind the ball (it follows the comet streak); each cell fills in the
+            // time the ball takes to cross it, so the paint front moves as one edge ending in a round cap
+            startFill(c, (1f / max(speed, 1f)).coerceIn(0.012f, FLOOD_DUR), delay = FLOOD_DELAY)
+            splatAt(l.x(c) + 0.5f, l.y(c) + 0.5f, s.dir)
             val idx = paintedInMove++
             main.post { listener.onCellPainted(c, idx) }
             if (l.isFloor(c)) sparkleAt(l.x(c) + 0.5f, l.y(c) + 0.5f)
         }
     }
 
-    private fun isFilling(c: Int) = fills.any { it.cell == c && it.to > 0f }
+    /** Undo: the cell's bars vanish and its stroke shrinks back. */
+    private fun wipe(c: Int) {
+        paint[c * 4 + 1] = (entryOf(c) shl 5).toFloat()
+        if (entryOf(c) == 0) { paint[c * 4 + 1] = (5 shl 5).toFloat(); paint[c * 4] = 1f }
+        paintDirty = true
+        startFill(c, 0.14f, to = 0f)
+    }
 
     private fun arrive() {
         stepIdx++
@@ -623,7 +661,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
             val last = steps.last()
             if (undoMode) {
                 val leaving = last.cell
-                if (unpaintSet?.contains(leaving) == true) startFill(leaving, paint[leaving * 4 + 1], 0.14f, to = 0f)
+                if (unpaintSet?.contains(leaving) == true) wipe(leaving)
             }
             val l = level!!
             val endCell = last.cell
@@ -633,7 +671,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
                 impactH = last.dir == 1 || last.dir == 3
                 impactDx = Dir.of(last.dir).dx.toFloat(); impactDy = Dir.of(last.dir).dy.toFloat()
                 val strength = (speed / 22f).coerceIn(0.3f, 1f)
-                impactAmp = 0.10f + 0.12f * strength
+                impactAmp = 0.04f + 0.05f * strength
                 val dx = Dir.of(last.dir).dx.toFloat(); val dy = Dir.of(last.dir).dy.toFloat()
                 impactBurst(ballX + dx * 0.36f, ballY + dy * 0.36f, -dx, -dy, strength)
                 // (no screen shake: the board is part of the surface)
@@ -669,21 +707,67 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         }
     }
 
-    private fun startFill(cell: Int, dir: Float, dur: Float, to: Float = 1f) {
+    /** Animates the entry stroke's tip of [cell] to [to] (paint arriving, or undo wiping it). */
+    private fun startFill(cell: Int, dur: Float, to: Float = 1f, delay: Float = 0f) {
         fills.removeAll { it.cell == cell }
         val from = paint[cell * 4]
-        if (to > 0f) { paint[cell * 4 + 1] = dir; paint[cell * 4 + 2] = now }
-        fills.add(Fill(cell, now, dur, from, to))
+        if (to > 0f) paint[cell * 4 + 2] = now + delay
+        fills.add(Fill(cell, now + delay, dur, from, to))
+    }
+
+    private fun codeOf(c: Int) = paint[c * 4 + 1].toInt()
+    private fun armsOf(c: Int) = codeOf(c) and 31
+    private fun entryOf(c: Int) = codeOf(c) shr 5
+    private fun isPainted(c: Int) = paint[c * 4 + 1] > 0.5f || fills.any { it.cell == c && it.to > 0f }
+    private fun setCode(c: Int, arms: Int, entry: Int) {
+        curMove?.let { if (!it.containsKey(c)) it[c] = paint[c * 4 + 1] }
+        paint[c * 4 + 1] = (arms or (entry shl 5)).toFloat()
+        paintDirty = true
+    }
+    private fun armBit(dir: Int) = when (dir) { 0 -> 1; 1 -> 2; 2 -> 4; 3 -> 8; else -> 0 }
+    private fun addArms(c: Int, bits: Int, delay: Float) {
+        if (bits == 0) return
+        if (delay <= 0f) setCode(c, armsOf(c) or bits, entryOf(c))
+        else {
+            curMove?.let { if (!it.containsKey(c)) it[c] = paint[c * 4 + 1] }
+            armAdds.add(ArmAdd(now + delay, c, bits))
+        }
+    }
+
+    /** A few paint droplets spray sideways off the path as it is painted. */
+    private fun splatAt(cx: Float, cy: Float, dir: Int) {
+        val c = cfg ?: return
+        if (boardFx.random() > 0.55f || dir !in 0..3) return
+        val d = Dir.of(dir)
+        val p = boardPx(cx, cy)
+        repeat(1 + (boardFx.random() * 2f).toInt()) {
+            val side = if (boardFx.random() < 0.5f) -1f else 1f
+            val sp = cellPx * (0.8f + 1.4f * boardFx.random())
+            val vx = (-d.dy * side * 1.0f - d.dx * 0.5f) * sp
+            val vy = (d.dx * side * 1.0f - d.dy * 0.5f) * sp
+            boardFx.spawn(p[0], p[1], vx, vy, cellPx * (0.07f + 0.07f * boardFx.random()), c.paint, 0.95f,
+                0.25f + 0.2f * boardFx.random(), 3, pdrag = 7f)
+        }
     }
 
     private fun updateFills() {
+        if (armAdds.isNotEmpty()) {
+            val ai = armAdds.iterator()
+            while (ai.hasNext()) {
+                val a = ai.next()
+                if (now >= a.time) { paint[a.cell * 4 + 1] = ((armsOf(a.cell) or a.bits) or (entryOf(a.cell) shl 5)).toFloat(); ai.remove(); paintDirty = true }
+            }
+        }
         if (fills.isEmpty()) return
         val it = fills.iterator()
         while (it.hasNext()) {
             val f = it.next()
             val k = ((now - f.start) / f.dur).coerceIn(0f, 1f)
             paint[f.cell * 4] = f.from + (f.to - f.from) * k
-            if (k >= 1f) it.remove()
+            if (k >= 1f) {
+                it.remove()
+                if (f.to <= 0f) paint[f.cell * 4 + 1] = 0f   // wiped by undo: back to bare floor
+            }
         }
         paintDirty = true
     }
@@ -727,26 +811,74 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         }
     }
 
+    // trail particles are laid along the path by distance (not time), so even a quick dash leaves a full trail
+    private var trailPrevX = 0f
+    private var trailPrevY = 0f
+    private var trailDir = 0f
+    private var trailK = 0
+
+    private fun pick(vararg hex: Int) = Rgb(hex[(boardFx.random() * hex.size).toInt().coerceAtMost(hex.size - 1)])
+
     private fun emitTrail(dt: Float) {
         val c = cfg ?: return
-        if (!moving || undoMode || ballScale < 0.9f) return
+        if (!moving || undoMode || ballScale < 0.9f) { trailPrevX = ballX; trailPrevY = ballY; return }
+        // direction of travel (for shards and bolts that point along the path)
+        val mdx = ballX - trailPrevX; val mdy = ballY - trailPrevY
+        if (abs(mdx) + abs(mdy) > 1e-4f) trailDir = kotlin.math.atan2(mdy, mdx)
+        trailPrevX = ballX; trailPrevY = ballY
         trailAcc += dt * 60f
         val p = boardPx(ballX, ballY)
         while (trailAcc >= 1f) {
             trailAcc -= 1f
+            trailK++
             val jx = (boardFx.random() - 0.5f) * cellPx * 0.4f
             val jy = (boardFx.random() - 0.5f) * cellPx * 0.4f
+            val r = boardFx.random(); val k = boardFx.random()
+            val nx = -kotlin.math.sin(trailDir); val ny = kotlin.math.cos(trailDir)
             when (c.trail.id) {
-                1 -> if (boardFx.random() < 0.55f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.14f + 0.12f * boardFx.random()), Rgb(0xFFFFFF), 0.9f, 0.4f, 2, spin = 3f)
-                2 -> if (boardFx.random() < 0.5f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, -cellPx * 0.6f, cellPx * (0.12f + 0.14f * boardFx.random()), Rgb(0xFFFFFF), 0.7f, 0.7f, 5)
-                3 -> boardFx.spawn(p[0], p[1], 0f, 0f, cellPx * 0.55f, c.skin.b, 0.5f, 0.28f, 0, pgrow = -cellPx * 1.6f)
-                4 -> if (boardFx.random() < 0.5f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2f, jy * 2f, cellPx * 0.16f, c.theme.paints[(boardFx.random() * 5).toInt().coerceAtMost(4)], 1f, 0.6f, 1, spin = 6f)
+                8 -> if (r < 0.6f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.08f + 0.16f * k), pick(0x3FA9F5, 0x1E7BE0, 0x6CC8FF), 1f, 0.6f, 3, pgrow = -cellPx * 0.12f)
+                9 -> if (r < 0.4f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, -cellPx * 0.5f, cellPx * (0.22f + 0.16f * k), pick(0xFF4F8B, 0xFF7FAE, 0xFF2E6A), 1f, 0.9f, 6, pdrag = 1f, angle = (k - 0.5f) * 0.6f)
+                10 -> if (r < 0.55f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.18f + 0.2f * k), pick(0xFFD23F, 0xFFE88A, 0xFFC21A), 1f, 0.7f, 7, spin = 2f)
+                11 -> if (r < 0.6f) boardFx.spawn(p[0] + jx * 0.5f, p[1] + jy * 0.5f, 0f, -cellPx * 0.3f, cellPx * (0.35f + 0.2f * k), pick(0xF4F4F7, 0xDADCE3, 0xC9CCD6), 0.5f, 0.9f, 0, pgrow = cellPx * 0.6f)
+                12 -> {
+                    boardFx.spawn(p[0] + jx * 0.4f, p[1] + jy * 0.4f, 0f, -cellPx * 0.8f, cellPx * (0.42f + 0.18f * k), pick(0xFF5A1F, 0xFF8A1A, 0xFF3D12), 0.85f, 0.4f, 0, pgrow = -cellPx * 0.8f)
+                    if (r < 0.6f) boardFx.spawn(p[0] + jx * 0.3f, p[1] + jy * 0.3f, 0f, -cellPx * 0.5f, cellPx * 0.24f, Rgb(0xFFE36A), 1f, 0.28f, 0, pgrow = -cellPx * 0.5f)
+                }
+                13 -> {
+                    if (r < 0.5f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 1.5f, jy * 1.5f, cellPx * (0.2f + 0.16f * k), pick(0x8FDBFF, 0xC9F1FF, 0x4FB8F0), 1f, 0.65f, 13, pdrag = 2f, angle = trailDir + (k - 0.5f) * 0.8f)
+                    if (r > 0.86f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * 0.16f, Rgb(0xFFFFFF), 1f, 0.6f, 11, spin = 2f)
+                }
+                14 -> {
+                    if (r < 0.45f) boardFx.spawn(p[0] + jx * 0.5f, p[1] + jy * 0.5f, 0f, 0f, cellPx * (0.42f + 0.2f * k), pick(0xB46CFF, 0x8A4DFF, 0xD9A8FF), 1f, 0.22f, 14, angle = trailDir + (k - 0.5f) * 0.9f)
+                    if (r > 0.8f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * 0.16f, Rgb(0xFFFFFF), 1f, 0.25f, 2, spin = 4f)
+                }
+                15 -> if (r < 0.4f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 1.5f, jy * 1.5f, cellPx * (0.2f + 0.12f * k), pick(0x4CAF50, 0x7BC74D, 0x2E8B3E), 1f, 1.0f, 8, pgravity = cellPx * 0.6f, pdrag = 2f, spin = (k - 0.5f) * 6f)
+                16 -> if (r < 0.35f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.22f + 0.14f * k), pick(0xFF6FB5, 0xFF9AD0, 0xE84FA0, 0xFFB3D9), 1f, 0.9f, 9, spin = (k - 0.5f) * 3f)
+                17 -> if (r < 0.25f) boardFx.spawn(p[0] + jx, p[1] + jy, jx, -cellPx * 0.7f, cellPx * (0.26f + 0.12f * k), pick(0x9C5BFF, 0xB97BFF, 0x7A3FE0), 1f, 0.95f, 10, pdrag = 1f, angle = (k - 0.5f) * 0.5f)
+                18 -> if (r < 0.5f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2f, jy * 2f, cellPx * (0.32f + 0.2f * k), pick(0x3C8CFF, 0x6FB2FF, 0x2A6BE0, 0x9AD0FF), 1f, 0.75f, 13, pdrag = 3f, angle = trailDir + (k - 0.5f) * 1.2f)
+                19 -> if (trailK % 4 == 0) boardFx.spawn(p[0], p[1], 0f, 0f, cellPx * 0.55f, if ((trailK / 4) % 2 == 0) Rgb(0x00E5FF) else Rgb(0xFF4FD8), 1f, 0.45f, 4, pgrow = cellPx * 0.5f)
+                20 -> {
+                    if (r < 0.6f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.35f + 0.2f * k), pick(0x7A3BD6, 0xA24FE0, 0x4A2CB0, 0xE05AB8), 0.55f, 0.6f, 0, pgrow = -cellPx * 0.3f)
+                    if (r > 0.7f) boardFx.spawn(p[0] + jx * 1.4f, p[1] + jy * 1.4f, 0f, 0f, cellPx * (0.12f + 0.1f * k), Rgb(0xFFFFFF), 1f, 0.7f, 2, spin = 3f)
+                }
+                21 -> if (r < 0.45f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 0.5f, cellPx * 0.25f, cellPx * (0.16f + 0.16f * k), pick(0xFFFFFF, 0xDDF2FF), 1f, 1.0f, 11, spin = (k - 0.5f) * 2f)
+                22 -> if (r < 0.45f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2f, jy * 2f, cellPx * (0.2f + 0.12f * k), pick(0xFF6FA8, 0xFF9AC2, 0xF2588F), 1f, 1.0f, 12, pdrag = 2f, spin = (k - 0.5f) * 6f)
+                23 -> {
+                    val wave = kotlin.math.sin(now * 12f) * cellPx * 0.22f
+                    val hue = 0.5f + 0.22f * kotlin.math.sin(now * 2.2f)
+                    boardFx.spawn(p[0] + nx * wave, p[1] + ny * wave, 0f, 0f, cellPx * 0.5f, hsv(((hue % 1f) + 1f) % 1f, 0.6f, 1f), 0.5f, 0.6f, 0, pgrow = -cellPx * 0.3f)
+                }
+                // a little stronger than the originals (2026-11-25): ~35% bigger, more of them, they last longer
+                1 -> if (boardFx.random() < 0.7f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.19f + 0.16f * boardFx.random()), Rgb(0xFFFFFF), 1f, 0.5f, 2, spin = 3f)
+                2 -> if (boardFx.random() < 0.65f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, -cellPx * 0.6f, cellPx * (0.16f + 0.18f * boardFx.random()), Rgb(0xFFFFFF), 0.85f, 0.85f, 5)
+                3 -> boardFx.spawn(p[0], p[1], 0f, 0f, cellPx * 0.72f, c.skin.b, 0.65f, 0.36f, 0, pgrow = -cellPx * 1.6f)
+                4 -> if (boardFx.random() < 0.65f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2.4f, jy * 2.4f, cellPx * 0.22f, c.theme.paints[(boardFx.random() * 5).toInt().coerceAtMost(4)], 1f, 0.75f, 1, spin = 6f)
                 5 -> {
                     val hue = (now * 0.8f) % 1f
-                    boardFx.spawn(p[0] + jx * 0.3f, p[1] + jy * 0.3f, 0f, 0f, cellPx * 0.36f, hsv(hue, 0.6f, 1f), 0.6f, 0.35f, 0, pgrow = -cellPx * 0.9f)
+                    boardFx.spawn(p[0] + jx * 0.3f, p[1] + jy * 0.3f, 0f, 0f, cellPx * 0.48f, hsv(hue, 0.65f, 1f), 0.75f, 0.45f, 0, pgrow = -cellPx * 0.9f)
                 }
-                6 -> if (boardFx.random() < 0.4f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 3f, jy * 3f, cellPx * (0.08f + 0.08f * boardFx.random()), c.paint, 1f, 0.5f, 3, pdrag = 3f)
-                7 -> if (boardFx.random() < 0.7f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.08f + 0.10f * boardFx.random()), Rgb(0xFFE38A), 1f, 0.6f, 2, spin = 4f)
+                6 -> if (boardFx.random() < 0.55f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 3.4f, jy * 3.4f, cellPx * (0.11f + 0.11f * boardFx.random()), c.paint, 1f, 0.65f, 3, pdrag = 3f)
+                7 -> if (boardFx.random() < 0.85f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.11f + 0.13f * boardFx.random()), Rgb(0xFFE38A), 1f, 0.75f, 2, spin = 4f)
                 else -> Unit
             }
         }
@@ -848,7 +980,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
                     ballScale = 1f
                     ballLanded = true
                     level?.let { l ->
-                        startFill(l.start, 4f, 0.22f)
+                        setCode(l.start, 0, 5); startFill(l.start, 0.22f)
                         val p = boardPx(l.x(l.start) + 0.5f, l.y(l.start) + 0.5f)
                         boardFx.spawn(p[0], p[1], 0f, 0f, cellPx * 0.4f, Rgb(0xFFFFFF), 0.6f, 0.35f, 4, pgrow = cellPx * 2f)
                     }
@@ -858,12 +990,8 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
             if (introT > 1.2f) introT = -1f
         }
         updateMove(dt)
-        if (moving && !undoMode && ballScale > 0.9f) {
-            for (i in GHOSTS downTo 1) { ghostX[i] = ghostX[i - 1]; ghostY[i] = ghostY[i - 1] }
-            ghostX[0] = ballX; ghostY[0] = ballY
-            ghostN = min(ghostN + 1, GHOSTS + 1)
-        } else ghostN = 0
-        val stretchTarget = if (moving && !undoMode) (speed / 24f).coerceIn(0f, 1f) * 0.14f else 0f
+        if (moving && !undoMode && ballScale > 0.9f) pushTrail()
+        val stretchTarget = if (moving && !undoMode) (speed / 40f).coerceIn(0f, 1f) * 0.07f else 0f
         stretch += (stretchTarget - stretch) * min(1f, dt * 22f)
         updateFills()
         emitTrail(dt)
@@ -898,6 +1026,63 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     private var curOffX = 0f
     private var curOffY = 0f
 
+    /**
+     * The comet streak behind the ball: a tapered glow in the ball's colour from where the ball was
+     * [STREAK_LAG] seconds ago to the ball. After a stop the tail keeps catching up, so it shrinks into the ball.
+     */
+    private fun drawStreak(c: SceneConfig, ballPx: Float, alpha: Float) {
+        if (trailN == 0 || undoMode) return
+        val tailT = now - STREAK_LAG
+        // drop points the tail has passed (keep one before it to interpolate)
+        var first = 0
+        while (first + 1 < trailN && trailT[first + 1] <= tailT) first++
+        if (first > 0) {
+            System.arraycopy(trailT, first, trailT, 0, trailN - first); System.arraycopy(trailX, first, trailX, 0, trailN - first); System.arraycopy(trailY, first, trailY, 0, trailN - first)
+            trailN -= first
+        }
+        // points from the tail to the ball (head), in cells
+        val px = ArrayList<Float>(trailN + 2); val py = ArrayList<Float>(trailN + 2)
+        if (trailN >= 2 && trailT[0] < tailT) {
+            val k = ((tailT - trailT[0]) / max(trailT[1] - trailT[0], 1e-4f)).coerceIn(0f, 1f)
+            px.add(trailX[0] + (trailX[1] - trailX[0]) * k); py.add(trailY[0] + (trailY[1] - trailY[0]) * k)
+        } else { px.add(trailX[0]); py.add(trailY[0]) }
+        for (i in 1 until trailN) if (trailT[i] > tailT) { px.add(trailX[i]); py.add(trailY[i]) }
+        px.add(ballX); py.add(ballY)
+        // keep only the corners (slides are straight lines)
+        val cx = ArrayList<Float>(); val cy = ArrayList<Float>()
+        for (i in px.indices) {
+            if (cx.size >= 2) {
+                val ax = cx[cx.size - 1] - cx[cx.size - 2]; val ay = cy[cy.size - 1] - cy[cy.size - 2]
+                val bx = px[i] - cx[cx.size - 1]; val by = py[i] - cy[cy.size - 1]
+                if (abs(ax * by - ay * bx) < 1e-4f && ax * bx + ay * by >= 0f) { cx[cx.size - 1] = px[i]; cy[cy.size - 1] = py[i]; continue }
+            }
+            if (cx.isNotEmpty() && abs(cx.last() - px[i]) + abs(cy.last() - py[i]) < 1e-4f) continue
+            cx.add(px[i]); cy.add(py[i])
+        }
+        if (cx.size < 2) return
+        var total = 0f
+        for (i in 1 until cx.size) total += abs(cx[i] - cx[i - 1]) + abs(cy[i] - cy[i - 1])
+        if (total < 0.08f) return
+        GLES30.glUseProgram(pStreak.id)
+        col3(pStreak, "uColor", c.skin.a)
+        val rMax = ballPx * 0.42f
+        var run = 0f
+        for (i in 1 until cx.size) {
+            val seg = abs(cx[i] - cx[i - 1]) + abs(cy[i] - cy[i - 1])
+            val s0 = run / total; val s1 = (run + seg) / total
+            run += seg
+            val ax = gridX + cx[i - 1] * cellPx; val ay = gridY + cy[i - 1] * cellPx
+            val bx = gridX + cx[i] * cellPx; val by = gridY + cy[i] * cellPx
+            val ra = rMax * (0.12f + 0.88f * s0); val rb = rMax * (0.12f + 0.88f * s1)
+            val pad = rMax + 2f
+            quadUniforms(pStreak, min(ax, bx) - pad, min(ay, by) - pad, abs(bx - ax) + pad * 2, abs(by - ay) + pad * 2)
+            GLES30.glUniform2f(pStreak.u("uA"), ax, ay); GLES30.glUniform2f(pStreak.u("uB"), bx, by)
+            GLES30.glUniform1f(pStreak.u("uRA"), ra); GLES30.glUniform1f(pStreak.u("uRB"), rb)
+            GLES30.glUniform1f(pStreak.u("uAA"), alpha * 0.85f * s0 * s0); GLES30.glUniform1f(pStreak.u("uAB"), alpha * 0.85f * s1 * s1)
+            drawQuad()
+        }
+    }
+
     private fun quadUniforms(p: Prog, x: Float, y: Float, qw: Float, qh: Float, sw: Float = w, sh: Float = h, identity: Boolean = false) {
         GLES30.glUniform4f(p.u("uRect"), x, y, qw, qh)
         GLES30.glUniform2f(p.u("uScreen"), sw, sh)
@@ -928,13 +1113,11 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         val c = cfg
         val theme = c?.theme ?: WorldTheme.ALL[0]
 
-        // background: the chapter's wood (the world's surface is only used for the board slab)
-        if (surfaceTex == 0 || surfaceTheme !== theme) loadSurface(theme)
-        val bd = c?.backdrop ?: Backdrop.ALL[0]
-        if (backdropTex == 0 || backdropRes != bd.res) loadBackdrop(bd)
+        // background: the clean light gradient (same as the menus' SurfaceBackground)
         GLES30.glUseProgram(pBg.id)
         quadUniforms(pBg, 0f, 0f, w, h, identity = true)
-        surfaceUniforms(pBg, 0, backdropTex, bdW, bdH)
+        col3(pBg, "uTop", Backdrop.CLEAN.top); col3(pBg, "uBottom", Backdrop.CLEAN.bottom)
+        GLES30.glUniform2f(pBg.u("uScreen"), w, h)
         drawQuad()
 
         // ambient particles
@@ -1043,12 +1226,13 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
                     if (horiz) { sx = 1f + stretch; sy = 1f - stretch * 0.55f } else { sy = 1f + stretch; sx = 1f - stretch * 0.55f }
                 }
                 if (impactT < 0.5f) {
-                    val sq = impactAmp * exp(-impactT * 9f) * cos(impactT * 32f)
+                    val sq = impactAmp * exp(-impactT * 14f) * cos(impactT * 30f)
                     if (impactH) { sx -= sq; sy += sq * 0.7f } else { sy -= sq; sx += sq * 0.7f }
                     // the ball presses into the wall and springs back
-                    val push = impactAmp * 0.45f * exp(-impactT * 11f) * sin(impactT * 30f) * cellPx
+                    val push = impactAmp * 0.15f * exp(-impactT * 16f) * sin(impactT * 30f) * cellPx
                     bx += impactDx * push; by += impactDy * push
                 }
+                drawStreak(c, bs, alpha)
                 GLES30.glUseProgram(pShadow.id)
                 val shk = 1f - hop * 0.6f
                 val shw = bs * 1.25f * sx * shk; val shh = bs * 0.9f * sy * shk
@@ -1060,34 +1244,17 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
                 drawQuad()
 
                 GLES30.glUseProgram(pBall.id)
-                // motion blur: fading copies at the last few frame positions
-                val blur = (speed / 18f).coerceIn(0f, 1f)
-                if (moving && !undoMode && ghostN > 1 && blur > 0.05f) {
-                    for (i in (ghostN - 1) downTo 1) {
-                        val k = i.toFloat() / GHOSTS
-                        val gs = bs * (1f - 0.10f * k)
-                        val gw = gs * sx; val gh = gs * sy
-                        quadUniforms(pBall, gridX + ghostX[i] * cellPx - gw / 2, gridY + ghostY[i] * cellPx - gh / 2, gw, gh)
-                        GLES30.glUniformMatrix3fv(pBall.u("uRot"), 1, false, rot, 0)
-                        col3(pBall, "uColorA", c.skin.a); col3(pBall, "uColorB", c.skin.b); col3(pBall, "uColorC", c.skin.c)
-                        GLES30.glUniform1f(pBall.u("uPattern"), c.skin.pattern.toFloat())
-                        GLES30.glUniform1f(pBall.u("uGloss"), c.skin.gloss)
-                        GLES30.glUniform1f(pBall.u("uMetal"), c.skin.metal)
-                        col3(pBall, "uEnv", theme.matA)
-                        GLES30.glUniform1f(pBall.u("uPx"), gs)
-                        GLES30.glUniform1f(pBall.u("uAlpha"), alpha * blur * 0.30f * (1f - k * 0.75f))
-                        GLES30.glUniform1f(pBall.u("uTime"), now)
-                        drawQuad()
-                    }
-                }
                 val qw = bs * sx; val qh = bs * sy
                 quadUniforms(pBall, bx - qw / 2, by - qh / 2, qw, qh)
                 GLES30.glUniformMatrix3fv(pBall.u("uRot"), 1, false, rot, 0)
-                col3(pBall, "uColorA", c.skin.a); col3(pBall, "uColorB", c.skin.b); col3(pBall, "uColorC", c.skin.c)
-                GLES30.glUniform1f(pBall.u("uPattern"), c.skin.pattern.toFloat())
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE3)
+                GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, ballTexture(c.skin.id))
+                GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+                GLES30.glUniform1i(pBall.u("uBallTex"), 3)
                 GLES30.glUniform1f(pBall.u("uGloss"), c.skin.gloss)
                 GLES30.glUniform1f(pBall.u("uMetal"), c.skin.metal)
-                col3(pBall, "uEnv", theme.matA)
+                GLES30.glUniform1f(pBall.u("uGlass"), c.skin.glass)
+                col3(pBall, "uEnv", Backdrop.CLEAN.bottom)
                 GLES30.glUniform1f(pBall.u("uPx"), bs)
                 GLES30.glUniform1f(pBall.u("uAlpha"), alpha)
                 GLES30.glUniform1f(pBall.u("uTime"), now)

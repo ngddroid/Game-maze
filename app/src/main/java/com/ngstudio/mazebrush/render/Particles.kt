@@ -35,11 +35,13 @@ class Particles(private val max: Int) {
     fun spawn(
         px: Float, py: Float, pvx: Float, pvy: Float, psize: Float, color: Rgb, alpha: Float, lifeSec: Float,
         pshape: Int, pgravity: Float = 0f, pdrag: Float = 0f, pgrow: Float = 0f, spin: Float = 0f, wrapAround: Boolean = false,
+        /** Starting angle in radians; NaN = random. */
+        angle: Float = Float.NaN,
     ) {
         if (count >= max) return
         val i = count++
         x[i] = px; y[i] = py; vx[i] = pvx; vy[i] = pvy; size[i] = psize; grow[i] = pgrow
-        rot[i] = rng.nextFloat() * 6.283f; vrot[i] = spin
+        rot[i] = if (angle.isNaN()) rng.nextFloat() * 6.283f else angle; vrot[i] = spin
         r[i] = color.r; g[i] = color.g; b[i] = color.b; a[i] = alpha
         life[i] = lifeSec; maxLife[i] = lifeSec
         shape[i] = pshape.toFloat(); flip[i] = rng.nextFloat() * 6.283f; flipSpeed[i] = 4f + rng.nextFloat() * 8f

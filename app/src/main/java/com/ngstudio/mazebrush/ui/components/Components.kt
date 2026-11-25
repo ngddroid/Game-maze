@@ -134,8 +134,8 @@ fun tapFeedback() {
 fun CandyButton(
     text: String,
     modifier: Modifier = Modifier,
-    color: Color = Candy.mint,
-    dark: Color = Candy.mintDark,
+    color: Color = Pro.chrome,
+    dark: Color = Pro.chromeLip,
     height: Dp = 64.dp,
     textSize: TextUnit = 26.sp,
     icon: Icon? = null,
@@ -226,24 +226,23 @@ fun RoundButton(
     }
 }
 
-/** Cream panel used by dialogs and cards. */
+/** White card used by dialogs and cards (clean style: soft warm shadow, no rim). */
 @Composable
 fun Panel(
     modifier: Modifier = Modifier,
-    color: Color = Candy.cream,
+    color: Color = Color.White,
     corner: Dp = 24.dp,
     padding: Dp = 20.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val warm = color == Candy.cream || color == Color.White
     Column(
         modifier
-            .shadow(12.dp, RoundedCornerShape(corner), ambientColor = Pro.rimDark, spotColor = Pro.chromeLip)
+            .shadow(14.dp, RoundedCornerShape(corner), ambientColor = Color(0xFFCDB89E), spotColor = Color(0xFFCDB89E))
             .clip(RoundedCornerShape(corner))
-            .background(Brush.verticalGradient(listOf(Color.White, color, lerp(color, Pro.border, 0.22f))))
-            .border(4.dp, Brush.verticalGradient(listOf(Pro.rimLight, Pro.rimDark, Pro.rimLight)), RoundedCornerShape(corner))
-            .padding(4.dp)
-            .border(1.5.dp, Color.White.copy(alpha = 0.75f), RoundedCornerShape(corner - 4.dp))
-            .padding((padding - 4.dp).coerceAtLeast(0.dp)),
+            .background(if (warm) Brush.verticalGradient(listOf(com.ngstudio.mazebrush.ui.theme.Clean.cardTop, com.ngstudio.mazebrush.ui.theme.Clean.cardBottom)) else Brush.verticalGradient(listOf(color, color)))
+            .border(1.5.dp, com.ngstudio.mazebrush.ui.theme.Clean.cardBorder, RoundedCornerShape(corner))
+            .padding(padding),
         horizontalAlignment = Alignment.CenterHorizontally,
         content = content,
     )
@@ -255,15 +254,14 @@ fun CounterPill(value: String, modifier: Modifier = Modifier, leading: @Composab
     Row(
         modifier
             .height(38.dp)
-            .shadow(3.dp, RoundedCornerShape(19.dp))
-            .background(Brush.verticalGradient(listOf(Pro.chrome, Pro.chromeDark)), RoundedCornerShape(19.dp))
-            .border(1.5.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f), Pro.chromeLip.copy(alpha = 0.6f))), RoundedCornerShape(19.dp))
+            .shadow(3.dp, RoundedCornerShape(19.dp), ambientColor = Color(0xFFD9C4AE), spotColor = Color(0xFFD9C4AE))
+            .background(Color.White, RoundedCornerShape(19.dp))
             .padding(start = 6.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         leading()
         Spacer(Modifier.width(6.dp))
-        Text(value, style = TextStyle(fontFamily = Lilita, fontSize = 19.sp, color = Pro.cream))
+        Text(value, style = TextStyle(fontFamily = Lilita, fontSize = 19.sp, color = Pro.text))
     }
 }
 
@@ -275,32 +273,15 @@ private val SURFACES = intArrayOf(
     R.drawable.surface_5, R.drawable.surface_6, R.drawable.surface_7, R.drawable.surface_8, R.drawable.surface_9,
 )
 
-/** The wood behind the screen: drives the corner leaves and engraved title colour (see [SurfaceBackground]). */
-val LocalBackdrop = androidx.compose.runtime.staticCompositionLocalOf { Backdrop.ALL[0] }
+/** The background behind the screen (one clean style now); content reads its [Backdrop.ink] for titles. */
+val LocalBackdrop = androidx.compose.runtime.staticCompositionLocalOf { Backdrop.CLEAN }
 
-/** The scene for the player's chapter: the newest unlocked level (won or ad-unlocked), or the debug override. */
-fun currentBackdrop(): Backdrop =
-    if (com.ngstudio.mazebrush.BuildConfig.DEBUG && com.ngstudio.mazebrush.game.DebugFlags.backdrop >= 0) Backdrop.forChapter(com.ngstudio.mazebrush.game.DebugFlags.backdrop)
-    else Backdrop.forLevel(com.ngstudio.mazebrush.MazeApp.instance.store.latestUnlocked)
-
-/** The wood for a given level (the game screen), or the debug override. */
-fun backdropForLevel(level: Int): Backdrop =
-    if (com.ngstudio.mazebrush.BuildConfig.DEBUG && com.ngstudio.mazebrush.game.DebugFlags.backdrop >= 0) Backdrop.forChapter(com.ngstudio.mazebrush.game.DebugFlags.backdrop)
-    else Backdrop.forLevel(level)
-
-/**
- * Screen background: the chapter's wood (pre-rendered by tools/MaterialArt), cross-fading when a new
- * chapter is reached. Provides [LocalBackdrop] to the content.
- */
+/** Screen background: the clean light gradient (the game's GL background draws the same one). */
 @Composable
-fun SurfaceBackground(backdrop: Backdrop = currentBackdrop(), modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
-    androidx.compose.runtime.CompositionLocalProvider(LocalBackdrop provides backdrop) {
-        Box(modifier.fillMaxSize().background(Color(0xFFE5B67C))) {
-            androidx.compose.animation.Crossfade(backdrop, animationSpec = tween(600), label = "backdrop") { b ->
-                Image(painterResource(b.res), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            }
-            content()
-        }
+fun SurfaceBackground(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit = {}) {
+    val b = Backdrop.CLEAN
+    androidx.compose.runtime.CompositionLocalProvider(LocalBackdrop provides b) {
+        Box(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(b.top.color(), b.bottom.color()))), content = content)
     }
 }
 
@@ -340,8 +321,8 @@ fun PaintProgressBar(progress: Float, color: Color, modifier: Modifier = Modifie
     val wave by rememberInfiniteTransition(label = "wave").animateFloat(0f, 6.283f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "w")
     Canvas(modifier.height(height)) {
         val r = size.height / 2
-        drawRoundRect(Color.Black.copy(alpha = 0.22f), Offset(0f, 2f), size, CornerRadius(r))
-        drawRoundRect(Pro.glass, Offset.Zero, size, CornerRadius(r))
+        drawRoundRect(Color.Black.copy(alpha = 0.08f), Offset(0f, 2f), size, CornerRadius(r))
+        drawRoundRect(Color(0xFFEDE1D3), Offset.Zero, size, CornerRadius(r))
         val inset = 3.dp.toPx()
         val fw = (size.width - inset * 2) * anim
         if (fw > 1f) {

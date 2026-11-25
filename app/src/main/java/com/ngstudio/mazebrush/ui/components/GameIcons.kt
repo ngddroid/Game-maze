@@ -27,7 +27,7 @@ import kotlin.math.sin
 /** Original icon set, drawn in code on a 24x24 grid (no icon fonts or third-party art). */
 enum class Icon {
     PLAY, PAUSE, UNDO, RESTART, HINT, HOME, GEAR, STAR, LOCK, COIN, TROPHY, CALENDAR, BALL, LEVELS, SOUND, MUSIC,
-    VIBRATE, CLOSE, CHECK, BACK, SHARE, RATE, DOC, SHIELD, CHEST, FLAME, VIDEO, GIFT, NEXT, PAINT, TRAIL
+    VIBRATE, CLOSE, CHECK, BACK, SHARE, RATE, DOC, SHIELD, CHEST, FLAME, VIDEO, GIFT, NEXT, PAINT, TRAIL, DROP, MAZE
 }
 
 private object Paths {
@@ -121,6 +121,14 @@ private fun DrawScope.drawIcon(icon: Icon, c: Color) {
             drawCircle(c, 8.2f, center)
             drawArc(Color.White.copy(alpha = 0.55f), 200f, 70f, false, Offset(center.x - 5.5f, center.y - 5.5f), Size(11f, 11f), style = Stroke(2.2f, cap = StrokeCap.Round))
             drawCircle(Color.White.copy(alpha = 0.9f), 1.6f, Offset(center.x - 3.4f, center.y - 3.6f))
+        }
+        Icon.DROP -> {
+            fillPath("M12 2.8c3.2 4.2 6.4 7.6 6.4 11.6a6.4 6.4 0 0 1-12.8 0c0-4 3.2-7.4 6.4-11.6z", c)
+            drawCircle(Color.White.copy(alpha = 0.75f), 1.6f, Offset(9.6f, 14.6f))
+        }
+        Icon.MAZE -> {
+            strokePath("M3.5 10V6c0-1.4 1.1-2.5 2.5-2.5h12c1.4 0 2.5 1.1 2.5 2.5v12c0 1.4-1.1 2.5-2.5 2.5h-7 M3.5 14.5v4", c, 2.2f)
+            strokePath("M8.5 8v8.5 M8.5 8H13 M15.5 11.5v5H12", c, 2.2f)
         }
         Icon.LEVELS -> for (i in 0..1) for (j in 0..1) drawRoundRect(c, Offset(3.5f + i * 9f, 3.5f + j * 9f), Size(8f, 8f), CornerRadius(2.4f))
         Icon.SOUND -> { fillPath("M4 9.5c0-.6.4-1 1-1h3l4.3-3.7c.6-.5 1.7-.1 1.7.8v12.8c0 .9-1.1 1.3-1.7.8L8 15.5H5c-.6 0-1-.4-1-1z", c); strokePath("M16.5 9a4.2 4.2 0 0 1 0 6 M19 6.5a7.8 7.8 0 0 1 0 11", c, 2.2f) }

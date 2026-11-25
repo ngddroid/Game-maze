@@ -32,40 +32,75 @@ val Nunito = FontFamily(
 object Candy {
     val pink = Color(0xFFF2617A)        // rose: highlights, badges
     val pinkDark = Color(0xFFB83A55)
-    val plum = Color(0xFF4A3426)        // espresso: icons, dark text
-    val plumDark = Color(0xFF2B1D14)
-    val lilac = Color(0xFFE9D9C4)       // beige tint for panels
+    val plum = Color(0xFF263A46)        // deep slate: icons, dark text (was espresso brown before the clean redesign)
+    val plumDark = Color(0xFF17232C)
+    val lilac = Color(0xFFEDE1D3)       // warm light tint for panels
     val sky = Color(0xFF3BA7F0)
     val skyDark = Color(0xFF1F74B8)
-    val mint = Color(0xFF4CC23A)        // lime green: main action
-    val mintDark = Color(0xFF2E8A1F)
+    val mint = Color(0xFF1FA39B)        // teal: main action (clean redesign; was lime green)
+    val mintDark = Color(0xFF12746E)
     val lemon = Color(0xFFFFC93C)
     val lemonDark = Color(0xFFD18E00)
     val orange = Color(0xFFFF8A3D)
     val orangeDark = Color(0xFFC85A12)
     val cream = Color(0xFFFFF8EF)
-    val ink = Color(0xFF4A3426)
-    val grey = Color(0xFFCDBEAB)
-    val greyDark = Color(0xFF9C8A76)
+    val ink = Color(0xFF263A46)
+    val grey = Color(0xFFD3D9DE)
+    val greyDark = Color(0xFF8E9BA5)
     val gold = Color(0xFFFFC53D)
     val goldDark = Color(0xFFE08A00)
 }
 
 /** Chrome on the wood: warm polished-wood buttons and bars, cream text, gold-rimmed cream cards. */
 object Pro {
-    val chrome = Color(0xFF94532A)
-    val chromeDark = Color(0xFF6E3818)
-    val chromeLip = Color(0xFF4A230E)
-    val glass = Color(0xF2733C1B)
-    val cream = Color(0xFFFFF4E0)
-    val creamDim = Color(0xCCFFF4E0)
+    // 2026-11-25: the old "wood" chrome is mapped onto the clean palette (teal chrome, white text, soft rims), so every
+    // screen and dialog that still uses Pro matches the new look. The names are kept to avoid touching every caller.
+    val chrome = Color(0xFF1FA39B)
+    val chromeDark = Color(0xFF168880)
+    val chromeLip = Color(0xFF0E5E58)
+    val glass = Color(0xEE263A46)
+    val cream = Color(0xFFFFFFFF)
+    val creamDim = Color(0xD9FFFFFF)
     val gold = Color(0xFFFFC94D)
     val goldDark = Color(0xFFC98A12)
-    val border = Color(0xFFEDB560)
-    /** Gold card rim: light top, deeper amber bottom. */
-    val rimLight = Color(0xFFFFD98A)
-    val rimDark = Color(0xFFE0922E)
-    val text = Color(0xFF3B2412)
+    val border = Color(0xFFEDE1D3)
+    /** Card rim: barely-there warm greys (it was gold). */
+    val rimLight = Color(0xFFF6EFE6)
+    val rimDark = Color(0xFFE6D8C8)
+    val text = Color(0xFF263A46)
+}
+
+/**
+ * Clean style (2026-11-25 redesign): a soft warm-cream background, a raised slate board, teal round buttons
+ * with white icons, white pills, deep-slate text, coral highlights. Our own palette; the layout ideas come
+ * from the hyper-casual genre (see CLAUDE.md §6).
+ */
+object Clean {
+    val bgTop = Color(0xFFFFF6EC)
+    val bgBottom = Color(0xFFF5E5D5)
+    val ink = Color(0xFF263A46)
+    val inkSoft = Color(0xFF5E7280)
+    val teal = Color(0xFF1FA39B)
+    val tealLight = Color(0xFF3FC4BA)
+    val tealDark = Color(0xFF12746E)
+    val coral = Color(0xFFFF6B5B)
+    val coralDark = Color(0xFFD94A3C)
+    val pill = Color(0xFFFFFFFF)
+    val pillShadow = Color(0xFFD9C4AE)
+    val track = Color(0xFFEDE1D3)
+    val gold = Color(0xFFFFC53D)
+    val cardTop = Color(0xFFFFFFFF)
+    val cardBottom = Color(0xFFFFF3E6)
+    val cardBorder = Color(0xFFF1E3D2)
+    val amber = Color(0xFFFFA62E)
+    val amberDark = Color(0xFFE07C12)
+    val sky = Color(0xFF4FA8FF)
+    val skyDark = Color(0xFF2E7FD1)
+    val slate = Color(0xFF6E8392)
+    val slateDark = Color(0xFF4A5E6C)
+    val navTop = Color(0xFFFFFFFF)
+    val navBottom = Color(0xFFFCEFE0)
+    val selTint = Color(0x1F1FA39B)
 }
 
 @Composable

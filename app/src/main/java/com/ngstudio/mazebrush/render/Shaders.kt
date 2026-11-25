@@ -44,159 +44,211 @@ float smin(float a, float b, float k) { float h = max(k - abs(a - b), 0.0) / k; 
 vec4 over(vec4 dst, vec3 c, float a) { return vec4(c * a + dst.rgb * (1.0 - a), a + dst.a * (1.0 - a)); }
 """
 
-    /**
-     * The surface (wood, marble, ...) comes from the pre-rendered world image res/drawable-nodpi/surface_N.jpg
-     * (tools/MaterialArt.kt), mapped to the screen with "centre crop". Menus show the same image, so game and
-     * menus always match, and there is no GPU noise precision to worry about.
-     */
-    private const val SURFACE = """
-uniform sampler2D uSurface;
-uniform vec2 uSurfOffset;   // pixels cropped from the image's left/top, in screen pixels
-uniform vec2 uSurfSize;     // displayed image size in screen pixels
-uniform vec2 uRealScreen;
-vec3 surfaceAt(vec2 sp) { return texture(uSurface, (sp + uSurfOffset) / uSurfSize).rgb; }
-"""
-
-    // ------------------------------------------------------------------------------------------ background (baked once)
+    // ------------------------------------------------------------------------------------------ background
+    /** The clean light background: the same vertical gradient the menus draw (Backdrop.CLEAN), with a soft light. */
     const val BG_FS = """#version 300 es
 precision highp float;
 in vec2 vPix;
+uniform vec3 uTop;
+uniform vec3 uBottom;
+uniform vec2 uScreen;
 out vec4 o;
-""" + SURFACE + """
-void main() { o = vec4(surfaceAt(vPix), 1.0); }
+void main() {
+    vec2 uv = vPix / uScreen;
+    vec3 c = mix(uTop, uBottom, uv.y);
+    o = vec4(c, 1.0);
+}
 """
 
     // ------------------------------------------------------------------------------------------ carved board bake
+    /**
+     * The board is a light slab shaped like the maze (its outline follows the paths, with rounded corners, a
+     * thin light rim, a front lip and a soft shadow); the paths are dark channels carved into it with big
+     * rounded corners. Just below every wall edge the wall's face shows as a darker band inside the channel.
+     * Walls that open to the outside are background; walls enclosed by paths are slab.
+     * uGrid is RGBA8: r = floor, g = unused, b = corner bits, a = floor neighbour bits (CPU, GameRenderer.bake).
+     * Mode 1 writes the paint mask: r = the whole channel (paint covers the wall-face band), g = distance to the nearest wall.
+     */
     const val BAKE_FS = """#version 300 es
 precision highp float;
 in vec2 vUv;
 in vec2 vPix;
-uniform highp sampler2D uGrid;      // R8: 1 = floor
+uniform highp sampler2D uGrid;
 uniform ivec2 uGridSize;
 uniform float uCell;
 uniform vec2 uOrigin;               // grid (0,0) in bake pixels
-uniform vec2 uBakeOrigin;           // bake (0,0) in screen pixels
-uniform int uMode;                  // 0 colour, 1 floor mask / AO / shadow
-uniform vec3 uFloorA;
-uniform vec3 uFloorB;
-// The board sits on a wood slab inside a cream card with a gold rim (same look as the Home level card).
-uniform vec4 uCard;                 // card rect in bake pixels (x, y, w, h)
-uniform vec4 uSlab;                 // wood slab rect in bake pixels
-uniform float uDp;                  // pixels per dp
-uniform sampler2D uWood;            // polished board wood (world 1) ...
-uniform int uWoodOn;                // ... or 0: the world's own surface
-uniform vec2 uWoodOffset;           // slab-pixel offset into the cover-cropped wood image
-uniform vec2 uWoodSize;             // displayed wood image size in pixels
+uniform int uMode;                  // 0 colour, 1 mask
+uniform vec3 uFloor;                // carved channel floor
+uniform vec3 uSideTop;              // slab top
+uniform vec3 uSideBottom;           // slab front lip and wall faces' tint
+uniform float uDepth;               // slab lip depth in cells
+uniform int uPattern;               // board surface: 0 plain, 1 wood grain, 2 terrazzo, 3 marble
 out vec4 o;
-""" + COMMON + SURFACE + """
-vec3 woodAt(vec2 bp, vec2 sp) {
-    if (uWoodOn == 0) return surfaceAt(sp);
-    return texture(uWood, (bp - uSlab.xy + uWoodOffset) / uWoodSize).rgb;
+""" + COMMON + """
+const float RIM = 0.30;
+// surface patterns for the board themes (p in cells, so values stay small: no precision seams on Mali)
+float bh(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
+float bn(vec2 q) {
+    vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(bh(i), bh(i + vec2(1.0, 0.0)), f.x), mix(bh(i + vec2(0.0, 1.0)), bh(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-const float HF = 0.13;  // inner wall face visible inside the channel, below each wall (cells)
-float isFloor(ivec2 c) {
-    if (c.x < 0 || c.y < 0 || c.x >= uGridSize.x || c.y >= uGridSize.y) return 0.0;
-    return texelFetch(uGrid, c, 0).r;
+vec3 surface(vec3 base, vec2 p, float strength) {
+    if (uPattern == 1) {            // wood: long wavy grain running across the board
+        float n = bn(p * vec2(0.45, 1.6)) * 1.8 + bn(p * vec2(1.1, 4.0)) * 0.5;
+        float g = 0.5 + 0.5 * sin((p.y * 2.6 + n * 2.2) * 3.14159);
+        float fine = bn(p * vec2(0.8, 14.0));
+        return base * (1.0 + strength * (0.16 * g - 0.08 - 0.08 * fine));
+    }
+    if (uPattern == 2) {            // terrazzo: little coloured chips
+        vec2 q = p * 3.2;
+        vec2 i = floor(q);
+        float h = bh(i);
+        vec2 c = vec2(bh(i + 3.1), bh(i + 7.7)) * 0.6 + 0.2;
+        float r = 0.07 + 0.09 * bh(i + 1.7);
+        float d = length(fract(q) - c) - r;
+        float chip = (h > 0.35 ? 1.0 : 0.0) * (1.0 - smoothstep(-0.03, 0.03, d)) * strength;
+        float k = bh(i + 5.3);
+        vec3 cc = k < 0.25 ? vec3(0.95, 0.45, 0.38) : k < 0.5 ? vec3(0.25, 0.70, 0.66) : k < 0.75 ? vec3(0.96, 0.76, 0.30) : vec3(0.55, 0.52, 0.50);
+        return mix(base, cc, chip);
+    }
+    if (uPattern == 3) {            // marble: soft grey veins
+        float n = bn(p * 0.7) * 3.0 + bn(p * 1.9) * 1.2;
+        float v = abs(sin(p.x * 0.8 + p.y * 0.55 + n));
+        float vein = (1.0 - smoothstep(0.0, 0.12, v)) * 0.55 + (1.0 - smoothstep(0.0, 0.35, v)) * 0.12;
+        return mix(base, base * 0.72, vein * strength);
+    }
+    return base;
+}   // slab margin around the outer paths (cells)
+const float HF = 0.26;    // visible wall face inside the channel, below each wall edge (cells)
+vec4 cellAt(ivec2 c) {
+    if (c.x < 0 || c.y < 0 || c.x >= uGridSize.x || c.y >= uGridSize.y) return vec4(0.0);
+    return texelFetch(uGrid, c, 0);
 }
-// Signed distance to the floor channels (negative inside floor). Exact inside walls: used for the
-// carved edge and the bevel. Walls sit exactly on the grid (no offset), so every wall is 1 cell thick.
+const vec2 CORNER[4] = vec2[4](vec2(1.0, 1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(-1.0, -1.0));
+// Box with its own radius per corner: r.x (+x,+y), r.y (+x,-y), r.z (-x,+y), r.w (-x,-y). (y points down.)
+float sdRBox(vec2 p, vec2 b, vec4 r) {
+    r.xy = (p.x > 0.0) ? r.xy : r.zw;
+    r.x = (p.y > 0.0) ? r.x : r.y;
+    vec2 q = abs(p) - b + r.x;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r.x;
+}
+// Signed distance to the floor channels (negative inside). Per cell the CPU packs (Kotlin cornerBits):
+// b = corner bits: low 4 = round this floor cell's corner off; high 4 = on a wall cell, fillet that corner
+//     (the three cells around it are floor), on a floor cell, all four cells around that corner are floor;
+// a = floor neighbour bits: 1 east, 2 west, 4 south, 8 north.
+// Each floor cell's box reaches halfway into its floor neighbours, so the inside of a path has no seams
+// (no grid lines); boxes are joined with a plain min, so straight runs stay perfectly straight.
 float F(vec2 p) {
+    const float R = 0.5;     // outer corners and dead ends: fully round
+    const float RF = 0.32;   // fillets on wall corners (rounded islands)
     ivec2 c = ivec2(floor(p));
-    float d = 1.5;
+    float d = 2.5;
     for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
         ivec2 cc = c + ivec2(i, j);
-        if (isFloor(cc) > 0.5) d = smin(d, sdBox(p - (vec2(cc) + 0.5), vec2(0.5), 0.12), 0.18);
+        vec4 t = cellAt(cc);
+        int bits = int(t.b * 255.0 + 0.5);
+        vec2 ctr = vec2(cc) + 0.5;
+        if (t.r > 0.5) {
+            int nb = int(t.a * 255.0 + 0.5);
+            vec4 r = vec4((bits & 1) != 0 ? R : 0.0, (bits & 2) != 0 ? R : 0.0, (bits & 4) != 0 ? R : 0.0, (bits & 8) != 0 ? R : 0.0);
+            // stretched along x into east/west floor neighbours, and along y into north/south ones
+            vec2 loH = vec2((nb & 2) != 0 ? -1.0 : -0.5, -0.5), hiH = vec2((nb & 1) != 0 ? 1.0 : 0.5, 0.5);
+            vec2 loV = vec2(-0.5, (nb & 8) != 0 ? -1.0 : -0.5), hiV = vec2(0.5, (nb & 4) != 0 ? 1.0 : 0.5);
+            d = min(d, sdRBox(p - ctr - (loH + hiH) * 0.5, (hiH - loH) * 0.5, r));
+            d = min(d, sdRBox(p - ctr - (loV + hiV) * 0.5, (hiV - loV) * 0.5, r));
+            // a grid corner with floor on all four cells: cover it, so open areas have no seam dots
+            for (int k = 0; k < 4; k++) if ((bits & (16 << k)) != 0) d = min(d, sdBox(p - ctr - 0.5 * CORNER[k], vec2(0.5), 0.0));
+        } else if (bits > 15) {
+            for (int k = 0; k < 4; k++) {
+                if ((bits & (16 << k)) == 0) continue;
+                // local frame: the grid corner at the origin, +x/+y pointing into this wall cell; the fillet
+                // fills the square [0,RF]^2 outside the circle of radius RF around (RF,RF)
+                vec2 v = ctr + 0.5 * CORNER[k];
+                vec2 lp = (p - v) * (-CORNER[k]);
+                vec2 q = lp - vec2(RF);
+                float dc = (q.x <= 0.0 && q.y <= 0.0) ? RF - length(q) : min(length(lp - vec2(RF, 0.0)), length(lp - vec2(0.0, RF)));
+                // the square reaches 0.06 into the neighbouring floor cells so the join has no hairline
+                d = min(d, max(sdBox(lp - vec2((RF - 0.06) * 0.5), vec2((RF + 0.06) * 0.5), 0.0), dc));
+            }
+        }
     }
     return d;
 }
-// Depth inside the floor = distance to the nearest wall cell (exact inside the floor, so neighbouring
-// floor tiles blend without creases).
-float depth(vec2 p) {
+// the board slab: one rounded rectangle around the whole grid, grown by RIM
+float S(vec2 p) { return sdBox(p - vec2(uGridSize) * 0.5, vec2(uGridSize) * 0.5, 0.5) - RIM; }
+// inside the floor: distance to the nearest wall cell (true distance; F's inside values are per cell)
+float W(vec2 p) {
     ivec2 c = ivec2(floor(p));
     float d = 1.5;
     for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
         ivec2 cc = c + ivec2(i, j);
-        if (isFloor(cc) < 0.5) d = min(d, sdBox(p - (vec2(cc) + 0.5), vec2(0.5), 0.12));
+        if (cellAt(cc).r < 0.5) d = min(d, sdBox(p - (vec2(cc) + 0.5), vec2(0.5), 0.0));
     }
-    return d;
+    return max(d, 0.0);
 }
 void main() {
     vec2 p = (vPix - uOrigin) / uCell;
-    vec2 sp = vPix + uBakeOrigin;
     float aa = 1.0 / uCell;
-    vec3 L = normalize(vec3(-0.45, -0.7, 0.75));
     float f0 = F(p);
-    float wall = smoothstep(-aa, aa, f0);
-    float dep = depth(p);
-    // inner face: floor that lies within HF below a wall edge (the wall's side seen through the opening)
-    float fAbove = F(p - vec2(0.0, HF));
-    float face = (1.0 - wall) * smoothstep(-aa, aa, fAbove);
-    float faceT = clamp(-f0 / HF, 0.0, 1.0);
-    float inner = 1.0 - smoothstep(-0.02, 0.26, F(p + vec2(-0.22, -0.30)));
-    float ao = smoothstep(0.0, 0.32, dep);
+    float fl = 1.0 - smoothstep(-aa, aa, f0);
+    // the wall face: floor whose point HF above is not floor
+    float faceOn = smoothstep(-aa, aa, F(p - vec2(0.0, HF)));
+    float face = fl * faceOn;
+    float dw = W(p);
     if (uMode == 1) {
-        o = vec4((1.0 - wall) * (1.0 - face), ao, inner, 1.0);
+        // paint covers the whole channel, the wall-face band too (the user wants no dark strip left over)
+        o = vec4(fl, clamp(dw / 0.5, 0.0, 1.0), 0.0, 1.0);
         return;
     }
-    // ---- card + slab shapes
-    vec2 cc = uCard.xy + uCard.zw * 0.5;
-    float dCard = sdBox(vPix - cc, uCard.zw * 0.5, 24.0 * uDp);
-    vec2 sc = uSlab.xy + uSlab.zw * 0.5;
-    float slabR = 0.6 * uCell;
-    float dSlab = sdBox(vPix - sc, uSlab.zw * 0.5, slabR);
-    if (dSlab > 0.0) {
-        float a1 = 1.0 / max(uDp, 1.0);
-        // soft brown drop shadow under the card
-        float sh = 1.0 - smoothstep(-6.0 * uDp, 12.0 * uDp, sdBox(vPix - cc - vec2(0.0, 5.0 * uDp), uCard.zw * 0.5, 24.0 * uDp));
-        vec4 col = vec4(vec3(0.29, 0.14, 0.05) * 0.34 * sh, 0.34 * sh);
-        float inCard = 1.0 - smoothstep(-0.8, 0.8, dCard);
-        if (inCard > 0.0) {
-            float t = clamp((vPix.y - uCard.y) / uCard.w, 0.0, 1.0);
-            vec3 rimL = vec3(1.0, 0.851, 0.541), rimD = vec3(0.878, 0.573, 0.180);
-            vec3 rim = mix(rimL, rimD, 1.0 - abs(t * 2.0 - 1.0));
-            rim *= 1.0 + 0.18 * (1.0 - smoothstep(0.0, 1.5 * uDp, -dCard));   // bright outer lip
-            vec3 cream = vec3(1.0, 0.973, 0.937), border = vec3(0.929, 0.710, 0.376);
-            vec3 body = t < 0.5 ? mix(vec3(1.0), cream, t * 2.0) : mix(cream, mix(cream, border, 0.22), t * 2.0 - 1.0);
-            // the slab sits in the card with a soft contact shadow
-            body *= 1.0 - 0.22 * (1.0 - smoothstep(0.0, 7.0 * uDp, dSlab - 2.0 * uDp));
-            float inRim = smoothstep(-4.0 * uDp - 0.8, -4.0 * uDp + 0.8, dCard);
-            vec3 c = mix(body, rim, inRim);
-            float line = (1.0 - smoothstep(0.0, 0.9, abs(dCard + 4.8 * uDp) - 0.75 * uDp)) * (1.0 - inRim);
-            c = mix(c, vec3(1.0), 0.75 * line);
-            col = vec4(c * inCard, inCard) + col * (1.0 - inCard);
-        }
-        // dark outline hugging the slab
-        float ol = 1.0 - smoothstep(0.0, 1.0, abs(dSlab - 0.035 * uCell) - 0.035 * uCell);
-        col.rgb = mix(col.rgb, vec3(0.26, 0.12, 0.04) * col.a, 0.55 * ol);
-        o = col;
-        return;
-    }
-    vec3 surf = woodAt(vPix, sp);
-    // wall top with a small rounded bevel on the carved edge
-    vec2 e = vec2(0.012, 0.0);
-    vec2 g = vec2(F(p + e.xy) - F(p - e.xy), F(p + e.yx) - F(p - e.yx));
-    g = g / max(length(g), 1e-4);
-    float bev = 1.0 - smoothstep(0.0, 0.07, f0);
-    vec3 n = normalize(vec3(-g * bev * 1.1, 1.0));
-    float dif = dot(n, L);
-    vec3 top = surf * (1.0 + 0.50 * (dif - L.z));
-    top += vec3(0.05) * bev * max(dif - L.z, 0.0) * 4.0;
-    // the face: lit near the top edge, darker where it meets the floor
-    vec3 faceCol = woodAt(vPix + vec2(0.0, 41.0), sp + vec2(0.0, 41.0)) * mix(0.92, 0.60, faceT);
-    faceCol *= 1.0 - 0.25 * smoothstep(0.75, 1.0, faceT);
-    // channel floor: tile grid, ambient occlusion, inner shadow
-    vec3 fl = mix(uFloorB, uFloorA, ao);
-    fl *= 0.94 + 0.10 * fbm(sp / (uRealScreen.x / 9.0));
-    vec2 q = fract(p);
-    float edge = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));
-    fl *= 1.0 - 0.24 * (1.0 - smoothstep(0.0, 0.018, edge));
-    fl *= 1.0 - 0.45 * inner;
-    vec3 c = mix(fl, faceCol, face);
-    c = mix(c, top, wall);
-    // slab rim: a slight bevel just inside the edge, then the dark outline
-    c *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, 0.18 * uCell, -dSlab));
-    c = mix(c, vec3(0.26, 0.12, 0.04), 0.55 * (1.0 - smoothstep(0.0, 1.0, abs(dSlab - 0.035 * uCell) - 0.035 * uCell)));
-    o = vec4(c, 1.0);
+    float s0 = S(p);
+    float slab = 1.0 - smoothstep(-aa, aa, s0);
+    // soft shadow under the slab and its front lip
+    float sh = 2.5;
+    for (int k = 0; k <= 3; k++) sh = min(sh, S(p - vec2(0.06, uDepth + 0.10 + 0.14 * float(k))));
+    float shadow = (1.0 - smoothstep(-0.25, 0.6, sh)) * 0.16;
+    vec4 col = vec4(vec3(0.42, 0.28, 0.18) * shadow, shadow);
+    float lipD = 2.5;
+    for (int k = 1; k <= 4; k++) lipD = min(lipD, S(p - vec2(0.0, uDepth * float(k) / 4.0)));
+    float lip = (1.0 - smoothstep(-aa, aa, lipD)) * (1.0 - slab);
+    col = vec4(surface(uSideBottom, p, 0.6) * lip, lip) + col * (1.0 - lip);
+    // slab top with a light rim along its outline
+    vec3 top = surface(uSideTop, p, 1.0) * (0.985 + 0.03 * smoothstep(0.0, 1.5, -s0));
+    top = mix(top, vec3(1.0), 0.4 * (1.0 - smoothstep(0.02, 0.07, -s0)));
+    col = vec4(top * slab, slab) + col * (1.0 - slab);
+    // carved channel: floor with a thin tile grid and soft shading near the walls
+    vec3 fc = (uPattern == 1 ? surface(uFloor, p + vec2(3.7, 1.3), 1.0) : uFloor) * (0.90 + 0.10 * smoothstep(0.0, 0.45, dw));
+    // the wall face: darker than the floor, a little lighter right at the top edge
+    float t = clamp(-f0 / HF, 0.0, 1.0);
+    vec3 faceC = mix(uFloor * 0.62, mix(uFloor, uSideBottom, 0.25) * 0.78, smoothstep(0.75, 1.0, 1.0 - t));
+    fc = mix(fc, faceC, face);
+    col = vec4(fc * fl, fl) + col * (1.0 - fl);
+    o = col;
+}
+"""
+
+    // ------------------------------------------------------------------------------------------ comet streak
+    /** One segment of the ball's comet streak: a capsule from A to B whose radius and alpha grow towards the ball. */
+    const val STREAK_FS = """#version 300 es
+precision highp float;
+in vec2 vPix;
+uniform vec2 uA;
+uniform vec2 uB;
+uniform float uRA;
+uniform float uRB;
+uniform float uAA;
+uniform float uAB;
+uniform vec3 uColor;
+out vec4 o;
+void main() {
+    vec2 pa = vPix - uA;
+    vec2 ba = uB - uA;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-4), 0.0, 1.0);
+    float r = mix(uRA, uRB, h);
+    float dc = length(pa - ba * h);
+    float a = (1.0 - smoothstep(r - 1.5, r + 1.0, dc)) * mix(uAA, uAB, h);
+    if (a <= 0.002) discard;
+    vec3 c = mix(uColor, vec3(1.0), 0.45 * (1.0 - smoothstep(0.0, r * 0.55, dc)));
+    o = vec4(c * a, a);
 }
 """
 
@@ -231,37 +283,85 @@ uniform float uAlpha;
 out vec4 o;
 """ + COMMON + """
 vec3 hsv2rgb(vec3 c) { vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0); return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y); }
+const vec2 DIRV[4] = vec2[4](vec2(0.0, -1.0), vec2(1.0, 0.0), vec2(0.0, 1.0), vec2(-1.0, 0.0));
+float segD(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+// Signed distance to one cell's paint, drawn like a round brush stroke (q in cell units, the cell is [0,1]^2;
+// see GameRenderer for the encoding). Bars and the stroke body reach a little past the cell's edges (W) so
+// neighbouring painted cells join without seams; a pixel is only shaded by its own cell, so nothing leaks.
+float paintSD(vec2 q, vec4 d) {
+    if (d.y < -0.5) return 9.0;
+    int code = int(d.y + 0.5);
+    int arms = code & 31;
+    int ent = code >> 5;
+    const float W = 0.56;
+    vec2 c = vec2(0.5);
+    float sd = 9.0;
+    if ((arms & 16) != 0) sd = length(q - c) - 0.5;
+    if ((arms & 1) != 0) sd = min(sd, sdBox(q - vec2(0.5, 0.22), vec2(W, 0.28), 0.0));
+    if ((arms & 2) != 0) sd = min(sd, sdBox(q - vec2(0.78, 0.5), vec2(0.28, W), 0.0));
+    if ((arms & 4) != 0) sd = min(sd, sdBox(q - vec2(0.5, 0.78), vec2(W, 0.28), 0.0));
+    if ((arms & 8) != 0) sd = min(sd, sdBox(q - vec2(0.22, 0.5), vec2(0.28, W), 0.0));
+    float tip = d.x;
+    if (ent >= 1 && ent <= 4 && tip > 0.0) {
+        vec2 dv = DIRV[ent - 1];
+        vec2 e0 = c - dv * 0.5;                  // the edge the ball came in through
+        vec2 a = e0 - dv;                        // the stroke starts behind it (no cap there)
+        vec2 b = e0 + dv * (tip - 0.5);          // its round cap; tip 1 = cap centred on the cell
+        float len = max(dot(b - a, dv), 0.0);
+        vec2 r = q - a;
+        float body = sdBox(vec2(dot(r, dv) - len * 0.5, dot(r, vec2(-dv.y, dv.x))), vec2(len * 0.5, W), 0.0);
+        sd = min(sd, min(segD(q, a, b) - 0.5, body));
+    } else if (ent == 5) {
+        sd = min(sd, length(q - c) - 0.5 * tip);
+    }
+    return sd;
+}
+// A cell's paint plus a bar towards each painted floor neighbour: a round end (where the ball stopped, or the
+// start spot) must not leave an unpainted corner next to paint in the neighbouring cell. The bar grows in over
+// ~0.2 s after both cells were painted, so the round end at the moving ball stays round.
+const ivec2 NB[4] = ivec2[4](ivec2(0, -1), ivec2(1, 0), ivec2(0, 1), ivec2(-1, 0));
+float cellSD(vec2 q, ivec2 k, vec4 d) {
+    float sd = paintSD(q, d);
+    if (d.y < 0.5) return sd;                    // an unpainted cell never reaches towards painted ones
+    for (int i = 0; i < 4; i++) {
+        ivec2 n = k + NB[i];
+        if (n.x < 0 || n.y < 0 || n.x >= uGridSize.x || n.y >= uGridSize.y) continue;
+        vec4 e = texelFetch(uPaint, n, 0);
+        if (e.y < 0.5) continue;
+        float grow = smoothstep(0.10, 0.30, uTime - max(d.z, e.z));
+        if (grow <= 0.0) continue;
+        vec2 dv = vec2(NB[i]);
+        vec2 hs = dv.x != 0.0 ? vec2(0.28, 0.56) : vec2(0.56, 0.28);
+        sd = min(sd, sdBox(q - vec2(0.5) - dv * 0.28, hs, 0.0) + 0.6 * (1.0 - grow));
+    }
+    return sd;
+}
 void main() {
     vec4 m = texture(uMask, vec2(vUv.x, 1.0 - vUv.y));
     if (m.r < 0.004) discard;
     vec2 p = (vPix - uOrigin) / uCell;
     ivec2 c = ivec2(floor(p));
+    float aa = 1.0 / uCell;
+    bool inGrid = c.x >= 0 && c.y >= 0 && c.x < uGridSize.x && c.y < uGridSize.y;
+    vec4 best = inGrid ? texelFetch(uPaint, c, 0) : vec4(0.0, -1.0, 0.0, 0.0);
     float cov = 0.0;
-    vec4 best = vec4(0.0);
-    vec2 bestCell = vec2(c);
-    // A pixel inside a floor tile takes only that tile's paint (no bleeding into the unpainted tile next
-    // to it). A pixel in a wall tile (the rounded fillets of the channel) takes the nearest painted tile.
-    bool ownFloor = c.x >= 0 && c.y >= 0 && c.x < uGridSize.x && c.y < uGridSize.y && texelFetch(uPaint, c, 0).y > -0.5;
-    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-        ivec2 k = c + ivec2(i, j);
-        if (k.x < 0 || k.y < 0 || k.x >= uGridSize.x || k.y >= uGridSize.y) continue;
-        if (ownFloor && (i != 0 || j != 0)) continue;
-        vec4 d = texelFetch(uPaint, k, 0);
-        if (d.y < -0.5 || d.x <= 0.0) continue;
-        vec2 q = p - vec2(k);
-        float inBox = ownFloor ? 1.0 : 1.0 - smoothstep(0.08, 0.16, sdBox(q - 0.5, vec2(0.5), 0.0));
-        if (inBox <= 0.0) continue;
-        float s;
-        if (d.y < 0.5) s = 1.0 - q.y;
-        else if (d.y < 1.5) s = q.x;
-        else if (d.y < 2.5) s = q.y;
-        else if (d.y < 3.5) s = 1.0 - q.x;
-        else s = length(q - 0.5) * 1.3;
-        float wob = (noise(p * 4.3 + vec2(k) * 1.7) - 0.5) * 0.22 * (1.0 - d.x);
-        float front = d.x * 1.3 - 0.15;
-        float fill = 1.0 - smoothstep(front - 0.05, front + 0.05, s + wob);
-        float v = fill * inBox;
-        if (v > cov) { cov = v; best = d; bestCell = vec2(k); }
+    if (best.y > -0.5) {
+        cov = 1.0 - smoothstep(-aa, aa, cellSD(p - vec2(c), c, best));
+    } else {
+        // a wall pixel inside a rounded fillet (the wall corner between two floor cells): it is painted only as
+        // far as BOTH of those floor cells are, so a stroke never flares into the corner of an unpainted channel
+        vec2 fq = p - vec2(c);
+        ivec2 sx = ivec2(fq.x < 0.5 ? -1 : 1, 0), sy = ivec2(0, fq.y < 0.5 ? -1 : 1);
+        float ca = 0.0, cb = 0.0;
+        bool fa = false, fb = false;
+        vec4 da = vec4(0.0, -1.0, 0.0, 0.0), db = da;
+        ivec2 ka = c + sx, kb = c + sy;
+        if (ka.x >= 0 && ka.y >= 0 && ka.x < uGridSize.x && ka.y < uGridSize.y) { da = texelFetch(uPaint, ka, 0); fa = da.y > -0.5; }
+        if (kb.x >= 0 && kb.y >= 0 && kb.x < uGridSize.x && kb.y < uGridSize.y) { db = texelFetch(uPaint, kb, 0); fb = db.y > -0.5; }
+        if (fa && da.y > 0.5) ca = 1.0 - smoothstep(-aa, aa, cellSD(clamp(p - vec2(ka), 0.0, 1.0), ka, da));
+        if (fb && db.y > 0.5) cb = 1.0 - smoothstep(-aa, aa, cellSD(clamp(p - vec2(kb), 0.0, 1.0), kb, db));
+        if (fa && fb) cov = min(ca, cb); else if (fa) cov = ca; else cov = cb;
+        best = ca >= cb ? da : db;
     }
     if (cov <= 0.002) discard;
     float age = max(uTime - best.z, 0.0);
@@ -270,12 +370,8 @@ void main() {
     if (uFinish > 0.5 && uFinish < 1.5) base = mix(base, vec3(1.0), 0.28);
     else if (uFinish > 3.5 && uFinish < 4.5) base = hsv2rgb(vec3(fract(best.w * 0.045 + 0.02 * p.y), 0.62, 0.98));
     else if (uFinish > 4.5) base = mix(uPaintA, uPaintB, clamp(p.y / float(uGridSize.y), 0.0, 1.0));
-    base *= 0.97 + 0.05 * fbm(p * 2.0 + 3.1);
     base *= mix(0.90, 1.0, m.g);
     base *= 1.0 - 0.16 * m.b;
-    vec2 q = fract(p);
-    float edge = min(min(q.x, 1.0 - q.x), min(q.y, 1.0 - q.y));
-    base *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.016, edge));
     float hgt = smoothstep(0.0, 1.0, m.g) * cov;
     vec3 n = normalize(vec3(-dFdx(hgt), -dFdy(hgt), 0.12));
     vec3 L = normalize(vec3(-0.45, -0.7, 0.75));
@@ -283,10 +379,10 @@ void main() {
     bool metallic = uFinish > 2.5 && uFinish < 3.5;
     float spec = pow(max(dot(n, Hh), 0.0), metallic ? 20.0 : 46.0) * (metallic ? 0.9 : (0.05 + 0.25 * wet));
     vec3 col = base * (1.0 + 0.25 * exp(-age * 9.0));
+    // fresh paint has a soft wet sheen that dries within ~0.3 s (smooth: no grid, no speckles)
+    col += vec3(0.10) * exp(-age * 7.0);
     col += vec3(spec);
-    col += vec3(0.08) * wet * smoothstep(0.45, 1.0, noise(p * 1.6 + age * 0.4));
-    vec2 lc = p - bestCell - 0.5;
-    col += vec3(0.18) * (1.0 - smoothstep(0.0, 0.07, abs(length(lc) - age * 1.6))) * exp(-age * 4.0);
+
     if (uShine > -0.5) {
         // win: a bright ring of light ripples out from the ball, with a softer echo behind it,
         // and every tile it passes keeps a warm afterglow that fades back
@@ -380,35 +476,24 @@ void main() {
 precision highp float;
 in vec2 vUv;
 uniform mat3 uRot;          // rolling rotation (applied to the surface pattern)
-uniform vec3 uColorA;
-uniform vec3 uColorB;
-uniform vec3 uColorC;
-uniform float uPattern;     // see BallSkin
+uniform sampler2D uBallTex; // equirectangular albedo; alpha = 1 - glow (tools/BallArt.kt)
 uniform float uGloss;
 uniform float uMetal;
+uniform float uGlass;       // 0 solid .. 1 see-through in the middle (bubble)
 uniform vec3 uEnv;          // surface colour reflected near the bottom
 uniform float uPx;          // ball diameter in pixels
 uniform float uAlpha;
 uniform float uTime;
 out vec4 o;
 """ + COMMON + """
-float hash3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-vec3 pattern(vec3 m) {
-    int pt = int(uPattern + 0.5);
-    if (pt == 1) return abs(m.y) < 0.28 ? uColorB : uColorA;
-    if (pt == 2) { float d = max(max(abs(m.x), abs(m.y)), abs(m.z)); return d > 0.86 ? uColorB : uColorA; }
-    if (pt == 3) return m.x > 0.0 ? uColorA : uColorB;
-    if (pt == 4) { float s = sin(atan(m.y, m.x) * 3.0 + m.z * 5.0); return mix(uColorA, uColorB, smoothstep(-0.2, 0.2, s)); }
-    if (pt == 5) {
-        float seg = floor((atan(m.z, m.x) + 3.14159) / 6.28318 * 6.0);
-        vec3 c = mod(seg, 3.0) < 0.5 ? uColorA : (mod(seg, 3.0) < 1.5 ? uColorB : uColorC);
-        return abs(m.y) > 0.88 ? vec3(1.0) : c;
-    }
-    if (pt == 6) { float n = fbm(m.xy * 3.0 + m.z * 2.0); return mix(uColorA, uColorB, smoothstep(0.35, 0.75, n)); }
-    if (pt == 7) { float n = fbm(m.xz * 2.5 + m.y); vec3 c = mix(uColorA, uColorB, n); return c + vec3(step(0.985, hash3(floor(m * 40.0)))); }
-    if (pt == 8) { float band = sin(m.y * 18.0 + fbm(m.xz * 4.0) * 3.0); return mix(uColorA, uColorB, smoothstep(-0.3, 0.3, band)); }
-    if (pt == 9) { float a = atan(m.z, m.x); float r = length(m.xz); float star = r * (0.7 + 0.3 * cos(5.0 * a)); return (m.y > 0.4 && star < 0.42) ? uColorB : uColorA; }
-    return uColorA;
+// the ball's texture at direction m (seam-safe gradients so mipmaps don't break along u = 0/1)
+vec4 ballTex(vec3 m) {
+    vec2 uv = vec2(atan(m.z, m.x) * 0.15915494 + 0.5, acos(clamp(m.y, -1.0, 1.0)) * 0.31830989);
+    vec2 dx = dFdx(uv), dy = dFdy(uv);
+    float u2 = fract(uv.x + 0.5);
+    vec2 dx2 = vec2(dFdx(u2), dx.y), dy2 = vec2(dFdy(u2), dy.y);
+    if (abs(dx2.x) + abs(dy2.x) < abs(dx.x) + abs(dy.x)) { dx = dx2; dy = dy2; }
+    return textureGrad(uBallTex, uv, dx, dy);
 }
 vec3 env(vec3 r) {
     vec3 sky = mix(vec3(0.95, 0.97, 1.0), vec3(0.78, 0.84, 0.95), clamp(1.0 - r.y, 0.0, 1.0));
@@ -424,7 +509,9 @@ void main() {
     vec3 n = vec3(l.x, -l.y, sqrt(max(0.0, 1.0 - r2)));
     vec3 L = normalize(vec3(-0.45, 0.65, 0.62));
     vec3 m = uRot * n;
-    vec3 base = pattern(m);
+    vec4 tx = ballTex(m);
+    vec3 base = tx.rgb;
+    float glowAmt = 1.0 - tx.a;
     float wrap = clamp((dot(n, L) + 0.4) / 1.4, 0.0, 1.0);
     vec3 diffuse = base * (0.38 + 0.72 * wrap);
     diffuse += base * 0.18 * pow(1.0 - n.z, 2.0);
@@ -436,7 +523,9 @@ void main() {
     float spec = pow(max(dot(reflect(-L, n), vec3(0.0, 0.0, 1.0)), 0.0), 90.0);
     col += vec3(1.6 * spec * uGloss);
     col *= 1.0 - 0.22 * smoothstep(0.1, 1.0, -n.y);
-    o = vec4(col * edge * uAlpha, edge * uAlpha);
+    col = mix(col, base * 1.3, glowAmt);
+    float a = edge * uAlpha * mix(1.0, 0.45 + 0.55 * fres + 0.4 * spec, uGlass);
+    o = vec4(col * a, a);
 }
 """
 
@@ -516,11 +605,79 @@ in vec4 vColor;
 flat in int vShape;
 in float vFlip;
 out vec4 o;
+float dot2(vec2 v) { return dot(v, v); }
+float sdSegP(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+float sdHeart(vec2 p) {   // y up, from (0,0) at the tip to ~1 at the top
+    p.x = abs(p.x);
+    if (p.y + p.x > 1.0) return sqrt(dot2(p - vec2(0.25, 0.75))) - 0.35355339;
+    return sqrt(min(dot2(p - vec2(0.0, 1.0)), dot2(p - 0.5 * max(p.x + p.y, 0.0)))) * sign(p.x - p.y);
+}
+float sdStar5(vec2 p, float r, float rf) {
+    const vec2 k1 = vec2(0.809016994, -0.587785252);
+    const vec2 k2 = vec2(-0.809016994, -0.587785252);
+    p.x = abs(p.x);
+    p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+    p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+    p.x = abs(p.x);
+    p.y -= r;
+    vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0.0, 1.0);
+    float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+    return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
 void main() {
     vec2 p = (vUv - 0.5) * 2.0;
     float a;
     vec3 tint = vec3(1.0);
-    if (vShape == 0) {
+    vec4 over = vec4(0.0);   // rgb mixed over the particle colour by .a (flower centres, white cores)
+    if (vShape == 6) {                                   // heart
+        float d = sdHeart(vec2(p.x, -p.y) * 0.62 + vec2(0.0, 0.5));
+        a = 1.0 - smoothstep(-0.015, 0.025, d);
+        tint = vec3(1.0 + 0.45 * (1.0 - smoothstep(0.0, 0.3, length(p - vec2(-0.35, -0.35)))));
+    } else if (vShape == 7) {                            // five-point star with a soft glow
+        float d = sdStar5(vec2(p.x, -p.y), 0.92, 0.45);
+        a = clamp((1.0 - smoothstep(-0.02, 0.04, d)) + 0.35 * (1.0 - smoothstep(0.0, 0.3, d)), 0.0, 1.0);
+        tint = vec3(1.0 + 0.35 * (1.0 - smoothstep(0.0, 0.45, length(p))));
+    } else if (vShape == 8) {                            // leaf with a midrib
+        float d = max(length(p - vec2(0.0, 0.62)), length(p + vec2(0.0, 0.62))) - 1.0;
+        a = 1.0 - smoothstep(-0.03, 0.03, d);
+        tint = vec3(p.y < 0.0 ? 1.12 : 0.88) * (1.0 - 0.3 * (1.0 - smoothstep(0.02, 0.06, abs(p.y))) * step(abs(p.x), 0.75));
+    } else if (vShape == 9) {                            // flower: five petals and a yellow centre
+        float r = length(p);
+        float ang = atan(p.y, p.x);
+        float pr = 0.62 + 0.3 * cos(5.0 * ang);
+        a = 1.0 - smoothstep(pr - 0.06, pr, r);
+        tint = vec3(0.85 + 0.25 * smoothstep(0.2, 0.8, r));
+        over = vec4(1.0, 0.86, 0.35, 1.0 - smoothstep(0.2, 0.28, r));
+    } else if (vShape == 10) {                           // music note
+        vec2 hp = (p - vec2(-0.28, 0.52)) * mat2(0.8, 0.6, -0.6, 0.8);
+        float d = length(hp * vec2(1.0, 1.5)) - 0.3;
+        d = min(d, max(abs(p.x - 0.0) - 0.07, abs(p.y + 0.1) - 0.62));
+        d = min(d, sdSegP(p, vec2(0.0, -0.72), vec2(0.42, -0.4)) - 0.08);
+        a = 1.0 - smoothstep(-0.02, 0.04, d);
+    } else if (vShape == 11) {                           // snowflake: six arms with little branches
+        float r = length(p);
+        float ang = mod(atan(p.y, p.x), 1.0471976) - 0.5235988;
+        vec2 q = vec2(cos(ang), abs(sin(ang))) * r;
+        float d = sdSegP(q, vec2(0.0), vec2(0.88, 0.0));
+        d = min(d, sdSegP(q, vec2(0.5, 0.0), vec2(0.74, 0.2)));
+        a = 1.0 - smoothstep(0.06, 0.13, d);
+    } else if (vShape == 12) {                           // petal
+        float d = max(length(p - vec2(0.0, 0.85)), length(p + vec2(0.0, 0.85))) - 1.18;
+        d = max(d, p.x - 0.75);
+        a = 1.0 - smoothstep(-0.04, 0.03, d);
+        tint = vec3(0.9 + 0.3 * smoothstep(-0.8, 0.6, p.x));
+    } else if (vShape == 13) {                           // crystal shard (long rhombus, two facets)
+        float d = abs(p.x) * 0.5 + abs(p.y) * 1.0;
+        a = 1.0 - smoothstep(0.42, 0.5, d);
+        tint = vec3(p.y < 0.0 ? 1.3 : 0.82);
+        over = vec4(1.0, 1.0, 1.0, 0.6 * (1.0 - smoothstep(0.0, 0.05, abs(p.y))) * (1.0 - smoothstep(0.3, 0.9, abs(p.x))));
+    } else if (vShape == 14) {                           // lightning bolt with a white core
+        float d = sdSegP(p, vec2(-0.95, 0.1), vec2(-0.35, -0.3));
+        d = min(d, sdSegP(p, vec2(-0.35, -0.3), vec2(0.1, 0.25)));
+        d = min(d, sdSegP(p, vec2(0.1, 0.25), vec2(0.95, -0.15)));
+        a = clamp((1.0 - smoothstep(0.05, 0.12, d)) + 0.45 * (1.0 - smoothstep(0.1, 0.35, d)), 0.0, 1.0);
+        over = vec4(1.0, 1.0, 1.0, 1.0 - smoothstep(0.02, 0.06, d));
+    } else if (vShape == 0) {
         a = 1.0 - smoothstep(0.2, 1.0, length(p));
     } else if (vShape == 1) {
         vec2 q = abs(p) - vec2(0.75, 0.42);
@@ -542,7 +699,8 @@ void main() {
         a += 0.8 * (1.0 - smoothstep(0.0, 0.22, length(p - vec2(-0.35, -0.38))));
         a = clamp(a, 0.0, 1.0);
     }
-    o = vec4(vColor.rgb * tint, vColor.a) * a;
+    vec3 rgb = mix(vColor.rgb * tint, over.rgb * vColor.a, over.a);
+    o = vec4(rgb, vColor.a) * a;
 }
 """
 }

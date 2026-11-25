@@ -1,5 +1,6 @@
 package com.ngstudio.mazebrush.ui.screens
 
+import com.ngstudio.mazebrush.MazeApp
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -74,10 +75,10 @@ fun OnboardingScreen(onFinish: () -> Unit) {
     val pager = rememberPagerState { pages.size }
     val scope = rememberCoroutineScope()
     BackHandler(pager.currentPage > 0) { scope.launch { pager.animateScrollToPage(pager.currentPage - 1) } }
-    SurfaceBackground(com.ngstudio.mazebrush.render.Backdrop.ALL[0]) {
+    SurfaceBackground {
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom = 18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             VSpace(20.dp)
-            EngravedText("MAZE BRUSH", 32.sp, WorldTheme.ALL[0].ink.color())
+            EngravedText("MAZE BRUSH", 32.sp, com.ngstudio.mazebrush.ui.theme.Clean.ink)
             HorizontalPager(pager, Modifier.weight(1f), userScrollEnabled = false) { page ->
                 Column(Modifier.fillMaxSize().padding(horizontal = 26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                     Box(Modifier.fillMaxWidth().aspectRatio(1f), contentAlignment = Alignment.Center) {
@@ -88,9 +89,9 @@ fun OnboardingScreen(onFinish: () -> Unit) {
                         }
                     }
                     VSpace(14.dp)
-                    EngravedText(pages[page].title, 36.sp, WorldTheme.ALL[0].ink.color())
+                    EngravedText(pages[page].title, 36.sp, com.ngstudio.mazebrush.ui.theme.Clean.ink)
                     VSpace(8.dp)
-                    BodyText(pages[page].body, size = 17.sp, color = WorldTheme.ALL[0].ink.color(), align = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp))
+                    BodyText(pages[page].body, size = 17.sp, color = com.ngstudio.mazebrush.ui.theme.Clean.ink, align = TextAlign.Center, modifier = Modifier.padding(horizontal = 8.dp))
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -145,6 +146,15 @@ private class DemoPlayback(val level: Level, val moves: List<Dir>) {
         return Offset(level.x(a) + 0.5f + (level.x(b) - level.x(a)) * f, level.y(a) + 0.5f + (level.y(b) - level.y(a)) * f)
     }
 
+    /** The paint stroke so far: every cell centre the ball has passed, then the ball itself (cell units). */
+    fun path(t: Float): List<Offset> {
+        val i = t.toInt().coerceIn(0, points.size - 1)
+        val out = ArrayList<Offset>(i + 2)
+        for (k in 0..i) { val c = points[k].first; out.add(Offset(level.x(c) + 0.5f, level.y(c) + 0.5f)) }
+        out.add(ball(t))
+        return out
+    }
+
     fun painted(t: Float, cell: Int): Float {
         val idx = points.indexOfFirst { it.first == cell }
         if (idx < 0) return 0f
@@ -159,7 +169,7 @@ private fun DemoSwipe() {
     val t by rememberInfiniteTransition(label = "d1").animateFloat(0f, 1f, infiniteRepeatable(tween(4200, easing = LinearEasing)), label = "t")
     val travel = (t * (play.points.size + 3)).coerceAtMost(play.points.size - 1f)
     Box(contentAlignment = Alignment.Center) {
-        MiniBoard(demoLevel, theme, Modifier.fillMaxSize(0.92f), painted = { play.painted(travel, it) }, paint = theme.paintFor(1).color(), ball = play.ball(travel))
+        com.ngstudio.mazebrush.ui.components.CleanMiniBoard(demoLevel, com.ngstudio.mazebrush.render.BoardTheme.ALL[0], MazeApp.instance.store.ballSkin, Modifier.fillMaxSize(0.92f), paint = com.ngstudio.mazebrush.render.PaintColor.byId(MazeApp.instance.store.paintColor).rgb.color(), paintPath = play.path(travel), ball = play.ball(travel))
         // swipe arrows showing the direction of the current move
         val move = play.points.getOrNull(travel.toInt().coerceAtMost(play.points.size - 1))?.second ?: 0
         val d = listOf(Dir.RIGHT, Dir.DOWN, Dir.LEFT, Dir.UP).getOrElse(move.coerceAtLeast(0)) { Dir.RIGHT }
@@ -179,7 +189,7 @@ private fun DemoPaint() {
     val travel = (t * (play.points.size + 6)).coerceAtMost(play.points.size - 1f)
     val done = travel >= play.points.size - 1f
     Box(contentAlignment = Alignment.Center) {
-        MiniBoard(demoLevel, theme, Modifier.fillMaxSize(0.92f), painted = { play.painted(travel, it) }, paint = theme.paintFor(2).color(), ball = play.ball(travel))
+        com.ngstudio.mazebrush.ui.components.CleanMiniBoard(demoLevel, com.ngstudio.mazebrush.render.BoardTheme.ALL[0], MazeApp.instance.store.ballSkin, Modifier.fillMaxSize(0.92f), paint = com.ngstudio.mazebrush.render.PaintColor.byId(MazeApp.instance.store.paintColor).rgb.color(), paintPath = play.path(travel), ball = play.ball(travel))
         if (done) GameText("100%", 52.sp, color = Candy.lemon, outline = Candy.pinkDark, modifier = Modifier.scale(rememberPulse(500, 0.1f)))
     }
 }

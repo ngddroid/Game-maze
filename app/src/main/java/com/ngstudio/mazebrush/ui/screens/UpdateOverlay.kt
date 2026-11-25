@@ -134,7 +134,7 @@ private fun UpdateDialog(onLater: () -> Unit, onUpdate: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) { GameIcon(Icon.NEXT, Color.White, size = 38.dp) }
         VSpace(12.dp)
-        EngravedText("UPDATE AVAILABLE", 28.sp, Color(0xFF5E2F14))
+        EngravedText("UPDATE AVAILABLE", 28.sp, Pro.text)
         VSpace(6.dp)
         BodyText(
             "A new version is ready. Keep playing while it downloads.",
@@ -164,7 +164,7 @@ private fun UpdateBanner(state: UpdateUi, onRestart: () -> Unit, onLater: () -> 
                 HSpace(12.dp)
                 Column(Modifier.weight(1f)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        BodyText("Downloading update", Modifier.weight(1f), size = 15.sp, color = Color(0xFF5E2F14), shadow = false)
+                        BodyText("Downloading update", Modifier.weight(1f), size = 15.sp, color = Pro.text, shadow = false)
                         BodyText("${(state.progress * 100).toInt()}%", size = 15.sp, color = Candy.mintDark, shadow = false)
                     }
                     VSpace(6.dp)
@@ -175,7 +175,7 @@ private fun UpdateBanner(state: UpdateUi, onRestart: () -> Unit, onLater: () -> 
                 Badge(Icon.CHECK, Candy.mint)
                 HSpace(12.dp)
                 Column(Modifier.weight(1f)) {
-                    BodyText("Update ready!", size = 16.sp, color = Color(0xFF5E2F14), shadow = false)
+                    BodyText("Update ready!", size = 16.sp, color = Pro.text, shadow = false)
                     BodyText("Restart to finish installing.", size = 12.sp, color = Color(0xFF8A5530), shadow = false)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -188,7 +188,7 @@ private fun UpdateBanner(state: UpdateUi, onRestart: () -> Unit, onLater: () -> 
                 Badge(Icon.RESTART, Candy.orange, Modifier.rotate(angle))
                 HSpace(12.dp)
                 Column(Modifier.weight(1f)) {
-                    BodyText("Installing update...", size = 16.sp, color = Color(0xFF5E2F14), shadow = false)
+                    BodyText("Installing update...", size = 16.sp, color = Pro.text, shadow = false)
                     BodyText("The game will restart in a moment.", size = 12.sp, color = Color(0xFF8A5530), shadow = false)
                 }
             }
@@ -196,7 +196,7 @@ private fun UpdateBanner(state: UpdateUi, onRestart: () -> Unit, onLater: () -> 
                 Badge(Icon.CLOSE, Candy.pink)
                 HSpace(12.dp)
                 Column(Modifier.weight(1f)) {
-                    BodyText("Update failed", size = 16.sp, color = Color(0xFF5E2F14), shadow = false)
+                    BodyText("Update failed", size = 16.sp, color = Pro.text, shadow = false)
                     BodyText("No worries, we'll try again next time.", size = 12.sp, color = Color(0xFF8A5530), shadow = false)
                 }
             }

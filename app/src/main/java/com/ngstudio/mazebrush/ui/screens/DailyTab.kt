@@ -71,14 +71,16 @@ fun DailyTab(onPlayDaily: (Long) -> Unit) {
     val hms = "%dh %02dm".format(untilMidnight / 3_600_000, (untilMidnight / 60_000) % 60)
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        EngravedText("DAILY", 34.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color())
+        androidx.compose.material3.Text("DAILY", style = androidx.compose.ui.text.TextStyle(fontFamily = com.ngstudio.mazebrush.ui.theme.Lilita, fontSize = 34.sp, color = com.ngstudio.mazebrush.ui.theme.Clean.ink, letterSpacing = 1.sp))
         VSpace(8.dp)
         Panel(Modifier.fillMaxWidth(), padding = 16.dp) {
             Ribbon("DAILY CHALLENGE", color = Candy.sky, dark = Candy.skyDark)
             VSpace(6.dp)
             BodyText(SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date(now)), size = 14.sp, color = Candy.greyDark)
             VSpace(8.dp)
-            MiniBoard(level, theme, Modifier.fillMaxWidth().height(170.dp), paint = theme.paintFor(3).color(), cardWood = true)
+            val dailyBoard = com.ngstudio.mazebrush.render.BoardTheme.forDay(store.today())
+            com.ngstudio.mazebrush.ui.components.CleanMiniBoard(level, dailyBoard, store.ballSkin, Modifier.fillMaxWidth().height(170.dp),
+                paint = com.ngstudio.mazebrush.render.PaintColor.byId(store.paintColor).rgb.color())
             VSpace(8.dp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 GameIcon(Icon.FLAME, Candy.orange, size = 26.dp)

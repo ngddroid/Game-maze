@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.ngstudio.mazebrush.render.BallSkin
+import com.ngstudio.mazebrush.render.BoardTheme
 import com.ngstudio.mazebrush.render.PaintFinish
 import com.ngstudio.mazebrush.render.TrailStyle
 import java.io.File
@@ -20,6 +21,11 @@ import java.util.TimeZone
  * Lock rule (debug AND release): only level 1 is open on a fresh install; winning level N opens N+1.
  * Levels unlocked one by one (debug Watch Ad dialog; later a real rewarded ad) are kept in [extraUnlocked].
  */
+/** First-time wins needed to fill the New Item bar. */
+const val NEW_ITEM_EVERY = 5
+/** Debug test builds start fully unlocked (set false for a locked debug build). Never affects release. */
+const val DEBUG_UNLOCK_ALL = false
+
 class GameStore(context: Context) {
     private val prefs = context.getSharedPreferences("maze", Context.MODE_PRIVATE)
     private val starsFile = AtomicFile(File(context.filesDir, "stars.bin"))
@@ -43,6 +49,13 @@ class GameStore(context: Context) {
     var ownedBalls by mutableStateOf(intSet("owned_balls", setOf(0))); private set
     var ownedTrails by mutableStateOf(intSet("owned_trails", setOf(0, 1))); private set
     var ownedFinishes by mutableStateOf(intSet("owned_finishes", setOf(0))); private set
+    /** Board colour theme (shop "Themes" tab). */
+    var boardTheme by mutableIntStateOf(prefs.getInt("board", 0)); private set
+    var ownedBoards by mutableStateOf(intSet("owned_boards", setOf(0))); private set
+    /** New Item progress: first-time wins towards the next free item (0 until [NEW_ITEM_EVERY]). */
+    var itemProgress by mutableIntStateOf(prefs.getInt("item_progress", 0)); private set
+    /** Paint colour (shop Paint tab, [com.ngstudio.mazebrush.render.PaintColor]). A saved 0 (the old "Auto") counts as Coral. */
+    var paintColor by mutableIntStateOf(prefs.getInt("paint_color", com.ngstudio.mazebrush.render.PaintColor.DEFAULT).let { if (it == 0) com.ngstudio.mazebrush.render.PaintColor.DEFAULT else it }); private set
 
     // stats
     var tilesPainted by mutableLongStateOf(prefs.getLong("tiles_painted", 0)); private set
@@ -66,6 +79,12 @@ class GameStore(context: Context) {
         if (starsFile.baseFile.exists()) runCatching {
             val b = starsFile.readFully()
             System.arraycopy(b, 0, stars, 0, minOf(b.size, stars.size))
+        }
+        // Test builds (debug only): unlock everything once on first launch so testers see all levels and skins.
+        // Release is never affected (BuildConfig.DEBUG is false). To ship a locked debug build, flip DEBUG_UNLOCK_ALL to false.
+        if (com.ngstudio.mazebrush.BuildConfig.DEBUG && DEBUG_UNLOCK_ALL && !prefs.getBoolean("debug_unlocked_all", false)) {
+            debugUnlockAll()
+            prefs.edit().putBoolean("debug_unlocked_all", true).apply()
         }
     }
 
@@ -107,7 +126,22 @@ class GameStore(context: Context) {
         prefs.edit().putStringSet("extra_unlocked", extraUnlocked.map { it.toString() }.toSet()).apply()
     }
 
-    class Reward(val coins: Int, val newStars: Int, val firstClear: Boolean, val chest: Int, val streak: Int = 0, val streakBonus: Int = 0)
+    class Reward(
+        val coins: Int, val newStars: Int, val firstClear: Boolean, val chest: Int, val streak: Int = 0, val streakBonus: Int = 0,
+        /** The item the New Item bar just unlocked, if it filled up on this win. */
+        val newItem: ShopItem? = null,
+    )
+
+    /** A ball skin or board theme, as offered by the New Item bar. */
+    data class ShopItem(val kind: Kind, val id: Int) {
+        enum class Kind { BALL, BOARD }
+        val name: String get() = if (kind == Kind.BALL) BallSkin.byId(id).name else BoardTheme.byId(id).name
+        val price: Int get() = if (kind == Kind.BALL) BallSkin.byId(id).price else BoardTheme.byId(id).price
+    }
+
+    /** The next item the New Item bar will unlock: the cheapest ball not owned yet (null when all are owned). Board themes follow the level, so they are never prizes. */
+    val nextNewItem: ShopItem?
+        get() = BallSkin.ALL.filter { it.id !in ownedBalls }.minByOrNull { it.price }?.let { ShopItem(ShopItem.Kind.BALL, it.id) }
 
     /** Records a win and returns the coins earned. */
     fun completeLevel(n: Int, earnedStars: Int, tiles: Int, moves: Int): Reward {
@@ -145,6 +179,20 @@ class GameStore(context: Context) {
             }
         }
         if (first && n % 10 == 0) hints += 1 // +1 hint with every chapter chest
+        // New Item bar: every NEW_ITEM_EVERY first-time wins unlock the next item (or 100 coins once all are owned)
+        var newItem: ShopItem? = null
+        if (first) {
+            itemProgress++
+            if (itemProgress >= NEW_ITEM_EVERY) {
+                itemProgress = 0
+                newItem = nextNewItem
+                when (newItem?.kind) {
+                    ShopItem.Kind.BALL -> { ownedBalls = ownedBalls + newItem.id; putIntSet("owned_balls", ownedBalls) }
+                    ShopItem.Kind.BOARD -> { ownedBoards = ownedBoards + newItem.id; putIntSet("owned_boards", ownedBoards) }
+                    null -> coinsEarned += 100
+                }
+            }
+        }
         tilesPainted += tiles
         swipes += moves
         coins += coinsEarned
@@ -152,9 +200,10 @@ class GameStore(context: Context) {
             .putInt("max_unlocked", maxUnlocked)
             .putStringSet("extra_unlocked", extraUnlocked.map { it.toString() }.toSet())
             .putInt("coins", coins).putInt("hints", hints).putInt("perfects", perfects).putInt("chests", chestsOpened).putInt("perfect_streak", perfectStreak)
+            .putInt("item_progress", itemProgress)
             .putLong("tiles_painted", tilesPainted).putLong("swipes", swipes)
             .apply()
-        return Reward(coinsEarned, earnedStars, first, chest, perfectStreak, streakBonus)
+        return Reward(coinsEarned, earnedStars, first, chest, perfectStreak, streakBonus, newItem)
     }
 
     // ---------------------------------------------------------------- economy
@@ -177,6 +226,7 @@ class GameStore(context: Context) {
 
     fun buyBall(id: Int) = buy(id, BallSkin.byId(id).price, ownedBalls) { ownedBalls = it; putIntSet("owned_balls", it) }
     fun buyTrail(id: Int) = buy(id, TrailStyle.byId(id).price, ownedTrails) { ownedTrails = it; putIntSet("owned_trails", it) }
+    fun buyBoard(id: Int) = buy(id, BoardTheme.byId(id).price, ownedBoards) { ownedBoards = it; putIntSet("owned_boards", it) }
     fun buyFinish(id: Int) = buy(id, PaintFinish.byId(id).price, ownedFinishes) { ownedFinishes = it; putIntSet("owned_finishes", it) }
     private fun buy(id: Int, price: Int, owned: Set<Int>, save: (Set<Int>) -> Unit): Boolean {
         if (id in owned) return true
@@ -189,6 +239,12 @@ class GameStore(context: Context) {
     fun grantFinish(id: Int) { if (!adUnlocks) return; ownedFinishes = ownedFinishes + id; putIntSet("owned_finishes", ownedFinishes) }
     fun selectBall(id: Int) { if (id in ownedBalls) { ballSkin = id; prefs.edit().putInt("ball", id).apply() } }
     fun selectTrail(id: Int) { if (id in ownedTrails) { trail = id; prefs.edit().putInt("trail", id).apply() } }
+    fun grantBoard(id: Int) { if (!adUnlocks) return; ownedBoards = ownedBoards + id; putIntSet("owned_boards", ownedBoards) }
+    fun selectBoard(id: Int) { if (id in ownedBoards) { boardTheme = id; prefs.edit().putInt("board", id).apply() } }
+    /** Campaign levels finished so far (paint colours unlock by this count). */
+    val levelsDone: Int get() = maxUnlocked - 1
+    fun ownsPaint(id: Int) = levelsDone >= com.ngstudio.mazebrush.render.PaintColor.byId(id).levels
+    fun selectPaint(id: Int) { if (ownsPaint(id)) { paintColor = id; prefs.edit().putInt("paint_color", id).apply() } }
     fun selectFinish(id: Int) { if (id in ownedFinishes) { finish = id; prefs.edit().putInt("finish", id).apply() } }
 
     // ---------------------------------------------------------------- daily
@@ -244,10 +300,20 @@ class GameStore(context: Context) {
     }
 
     // ---------------------------------------------------------------- debug tools
+    /** Debug only: open every level, own every ball/trail/finish (paint colours unlock by level, so all become free too), and stock coins/hints. */
     fun debugUnlockAll() {
         if (!com.ngstudio.mazebrush.BuildConfig.DEBUG) return
         maxUnlocked = LevelRepository.TOTAL
-        prefs.edit().putInt("max_unlocked", maxUnlocked).apply()
+        ownedBalls = BallSkin.ALL.map { it.id }.toSet()
+        ownedTrails = TrailStyle.ALL.map { it.id }.toSet()
+        ownedFinishes = PaintFinish.ALL.map { it.id }.toSet()
+        ownedBoards = BoardTheme.ALL.map { it.id }.toSet()
+        coins = maxOf(coins, 999_999)
+        hints = maxOf(hints, 999)
+        putIntSet("owned_balls", ownedBalls); putIntSet("owned_trails", ownedTrails)
+        putIntSet("owned_finishes", ownedFinishes); putIntSet("owned_boards", ownedBoards)
+        prefs.edit().putInt("max_unlocked", maxUnlocked).putInt("coins", coins).putInt("hints", hints).apply()
+        starsVersion++
     }
 
     fun debugReset() {
@@ -256,7 +322,7 @@ class GameStore(context: Context) {
         stars.fill(0)
         starsFile.delete()
         onboardingDone = false; maxUnlocked = 1; extraUnlocked = emptySet(); coins = 50; hints = 3; starsVersion++
-        ballSkin = 0; trail = 1; finish = 0; ownedBalls = setOf(0); ownedTrails = setOf(0, 1); ownedFinishes = setOf(0)
+        ballSkin = 0; trail = 1; finish = 0; ownedBalls = setOf(0); ownedTrails = setOf(0, 1); ownedFinishes = setOf(0); boardTheme = 0; ownedBoards = setOf(0); itemProgress = 0; paintColor = com.ngstudio.mazebrush.render.PaintColor.DEFAULT
         perfectStreak = 0; tilesPainted = 0; swipes = 0; perfects = 0; hintsUsed = 0; dailyDoneDay = -1; dailyStreak = 0; bestDailyStreak = 0
         dailiesDone = 0; calendarClaimDay = -1; calendarIndex = 0; claimedAchievements = emptySet(); chestsOpened = 0
     }

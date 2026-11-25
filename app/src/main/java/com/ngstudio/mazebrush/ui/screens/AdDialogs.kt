@@ -81,7 +81,7 @@ fun WatchAdDialog(level: Int, onClose: () -> Unit, onPlay: (Int) -> Unit) {
                 Ribbon("LEVEL $level", color = Candy.sky, dark = Candy.skyDark)
                 VSpace(14.dp)
                 Box(contentAlignment = Alignment.Center) {
-                    GameIcon(Icon.LOCK, Candy.plum, size = 70.dp)
+                    GameIcon(Icon.LOCK, com.ngstudio.mazebrush.ui.theme.Clean.ink, size = 70.dp)
                 }
                 VSpace(10.dp)
                 BodyText("This level is locked.\nWatch a short ad to unlock it now!", align = TextAlign.Center, size = 16.sp)

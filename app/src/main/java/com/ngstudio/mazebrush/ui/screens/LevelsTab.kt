@@ -1,5 +1,6 @@
 package com.ngstudio.mazebrush.ui.screens
 
+import com.ngstudio.mazebrush.ui.theme.Clean
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -76,7 +77,7 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            EngravedText("LEVELS", 34.sp, com.ngstudio.mazebrush.ui.components.LocalBackdrop.current.ink.color(), Modifier.align(Alignment.CenterHorizontally))
+            androidx.compose.material3.Text("LEVELS", Modifier.align(Alignment.CenterHorizontally), style = androidx.compose.ui.text.TextStyle(fontFamily = com.ngstudio.mazebrush.ui.theme.Lilita, fontSize = 34.sp, color = Clean.ink, letterSpacing = 1.sp))
             VSpace(6.dp)
             LazyRow(state = rowState, contentPadding = PaddingValues(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(chapters) { c ->
@@ -85,8 +86,8 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
             }
             VSpace(8.dp)
             val theme = WorldTheme.forLevel(chapter * PER_CHAPTER + 1)
-            Box(Modifier.align(Alignment.CenterHorizontally).background(Color.White.copy(alpha = 0.85f), RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 4.dp)) {
-                BodyText("Chapter ${chapter + 1}  ·  ${com.ngstudio.mazebrush.render.Backdrop.forChapter(chapter).name}", size = 14.sp, color = theme.accentDark.color())
+            Box(Modifier.align(Alignment.CenterHorizontally).shadow(2.dp, RoundedCornerShape(14.dp), ambientColor = Clean.pillShadow, spotColor = Clean.pillShadow).background(Color.White, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 4.dp)) {
+                BodyText("Chapter ${chapter + 1}  ·  Levels ${chapter * PER_CHAPTER + 1}-${(chapter + 1) * PER_CHAPTER}", size = 14.sp, color = Clean.inkSoft, shadow = false)
             }
             val gridState = rememberLazyGridState()
             LaunchedEffect(chapter) {
@@ -122,7 +123,7 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
         if (msg != null) {
             Box(
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 26.dp).shadow(8.dp, RoundedCornerShape(18.dp))
-                    .background(Candy.plum, RoundedCornerShape(18.dp)).border(2.dp, Color.White, RoundedCornerShape(18.dp))
+                    .background(Clean.ink, RoundedCornerShape(18.dp)).border(2.dp, Color.White, RoundedCornerShape(18.dp))
                     .padding(horizontal = 18.dp, vertical = 10.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -140,24 +141,24 @@ fun LevelsTab(onPlay: (Int) -> Unit) {
 private fun ChapterChip(c: Int, selected: Boolean, onClick: () -> Unit) {
     val store = MazeApp.instance.store
     val first = c * PER_CHAPTER + 1
-    val theme = WorldTheme.forLevel(first)
     val unlocked = store.isUnlocked(first) || (first..first + PER_CHAPTER - 1).any { store.isUnlocked(it) }
     store.starsVersion
     val stars = remember(store.starsVersion, c) { (first until first + PER_CHAPTER).sumOf { store.starsOf(it) } }
+    val ink = if (selected) Color.White else Clean.ink
+    val soft = if (selected) Color.White.copy(alpha = 0.85f) else Clean.inkSoft
     Column(
-        Modifier.width(92.dp).scale(if (selected) 1.06f else 1f)
-            .shadow(if (selected) 10.dp else 4.dp, RoundedCornerShape(18.dp))
-            .background(Brush.verticalGradient(listOf(Pro.chrome, Pro.chromeDark)), RoundedCornerShape(18.dp))
-            .border(if (selected) 2.5.dp else 1.dp, if (selected) Pro.gold else Color.White.copy(alpha = 0.15f), RoundedCornerShape(18.dp))
+        Modifier.width(92.dp).scale(if (selected) 1.05f else 1f)
+            .shadow(if (selected) 8.dp else 3.dp, RoundedCornerShape(18.dp), ambientColor = Clean.pillShadow, spotColor = Clean.pillShadow)
+            .background(if (selected) Brush.verticalGradient(listOf(Clean.tealLight, Clean.teal)) else Brush.verticalGradient(listOf(Color.White, Color.White)), RoundedCornerShape(18.dp))
             .clickable { tapFeedback(); onClick() }
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        EngravedText("CH ${c + 1}", 20.sp, if (selected) Pro.gold else Pro.cream)
-        BodyText("$first-${first + PER_CHAPTER - 1}", size = 11.sp, color = Pro.creamDim, shadow = false)
+        androidx.compose.material3.Text("CH ${c + 1}", style = androidx.compose.ui.text.TextStyle(fontFamily = com.ngstudio.mazebrush.ui.theme.Lilita, fontSize = 20.sp, color = ink))
+        BodyText("$first-${first + PER_CHAPTER - 1}", size = 11.sp, color = soft, shadow = false)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (unlocked) { StarIcon(true, size = 14.dp); BodyText(" $stars", size = 12.sp, color = Pro.cream, shadow = false) }
-            else GameIcon(Icon.LOCK, Pro.creamDim, size = 16.dp)
+            if (unlocked) { StarIcon(true, size = 14.dp); BodyText(" $stars", size = 12.sp, color = ink, shadow = false) }
+            else GameIcon(Icon.LOCK, soft, size = 16.dp)
         }
     }
 }
@@ -169,28 +170,31 @@ private fun LevelBubble(n: Int, theme: WorldTheme, modifier: Modifier, onClick: 
     val unlocked = store.isUnlocked(n)
     val stars = store.starsOf(n)
     val current = n == store.currentLevel
-    val color = when {
-        !unlocked -> Pro.chromeDark
-        current -> Pro.gold
-        stars > 0 -> Pro.cream
-        else -> Candy.sky
+    // clean style: done = teal, current = coral (pulsing), open but not done = white with a teal number, locked = white with a grey lock
+    val fill = when {
+        current -> Clean.coral
+        unlocked && stars > 0 -> Clean.teal
+        else -> Color.White
     }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f).scale(if (current) rememberPulse(900, 0.06f) else 1f)
-                .shadow(5.dp, CircleShape)
-                .background(Brush.verticalGradient(listOf(lerp(color, Color.White, 0.3f), color)), CircleShape)
-                .border(if (unlocked) 2.dp else 1.dp, if (unlocked) Pro.border else Color.White.copy(alpha = 0.15f), CircleShape)
+                .shadow(if (unlocked) 5.dp else 2.dp, CircleShape, ambientColor = Clean.pillShadow, spotColor = Clean.pillShadow)
+                .background(if (fill == Color.White) Brush.verticalGradient(listOf(Color.White, Color.White)) else Brush.verticalGradient(listOf(lerp(fill, Color.White, 0.22f), fill)), CircleShape)
+                .border(if (unlocked && fill == Color.White) 2.dp else 0.dp, if (unlocked && fill == Color.White) Clean.teal else Color.Transparent, CircleShape)
                 .clickable { tapFeedback(); onClick() },
             contentAlignment = Alignment.Center,
         ) {
-            if (unlocked && (stars > 0 || current)) EngravedText("$n", if (n >= 1000) 16.sp else 21.sp, Pro.text)
-            else if (unlocked) GameText("$n", if (n >= 1000) 15.sp else 20.sp, outline = lerp(color, Color.Black, 0.35f), outlineWidth = 0.08f)
-            else GameIcon(Icon.LOCK, Pro.creamDim, size = 22.dp)
+            val numStyle = androidx.compose.ui.text.TextStyle(fontFamily = com.ngstudio.mazebrush.ui.theme.Lilita, fontSize = if (n >= 1000) 16.sp else 21.sp)
+            when {
+                !unlocked -> GameIcon(Icon.LOCK, Clean.inkSoft.copy(alpha = 0.45f), size = 20.dp)
+                fill == Color.White -> androidx.compose.material3.Text("$n", style = numStyle.copy(color = Clean.teal))
+                else -> androidx.compose.material3.Text("$n", style = numStyle.copy(color = Color.White))
+            }
         }
         Row(Modifier.height(14.dp).padding(top = 2.dp)) {
             if (unlocked && stars > 0) for (k in 1..3) StarIcon(k <= stars, size = 12.dp)
-            else if (!unlocked) BodyText("$n", size = 10.sp, color = Pro.cream)
+            else if (!unlocked) BodyText("$n", size = 10.sp, color = Clean.inkSoft.copy(alpha = 0.7f), shadow = false)
         }
     }
 }

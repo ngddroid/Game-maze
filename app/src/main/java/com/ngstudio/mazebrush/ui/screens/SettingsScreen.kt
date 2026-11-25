@@ -100,18 +100,13 @@ fun SettingsScreen(onBack: () -> Unit) {
                 if (BuildConfig.DEBUG) {
                     VSpace(14.dp)
                     Panel(Modifier.fillMaxWidth(), padding = 14.dp) {
-                        Ribbon("DEBUG TOOLS", color = Candy.plum, dark = Candy.plumDark)
+                        Ribbon("DEBUG TOOLS", color = com.ngstudio.mazebrush.ui.theme.Clean.inkSoft, dark = com.ngstudio.mazebrush.ui.theme.Clean.ink)
                         VSpace(8.dp)
-                        ToggleRow(Icon.PLAY, "Autoplay solutions", Candy.plum, DebugFlags.autoplay) { DebugFlags.autoplay = !DebugFlags.autoplay }
+                        ToggleRow(Icon.PLAY, "Autoplay solutions", com.ngstudio.mazebrush.ui.theme.Clean.inkSoft, DebugFlags.autoplay) { DebugFlags.autoplay = !DebugFlags.autoplay }
                         Divider()
-                        // cycles Auto -> chapter backgrounds 1..10 -> Auto (view only, saves nothing)
-                        val bdN = com.ngstudio.mazebrush.render.Backdrop.ALL.size
-                        val bdLabel = if (DebugFlags.backdrop < 0) "Auto" else "${DebugFlags.backdrop + 1}. ${com.ngstudio.mazebrush.render.Backdrop.ALL[DebugFlags.backdrop].name}"
-                        LinkRow(Icon.LEVELS, "Background: $bdLabel", Candy.plum) { DebugFlags.backdrop = if (DebugFlags.backdrop + 1 >= bdN) -1 else DebugFlags.backdrop + 1 }
+                        LinkRow(Icon.LEVELS, "Unlock all 5000 levels", com.ngstudio.mazebrush.ui.theme.Clean.inkSoft) { store.debugUnlockAll(); app.sound.unlock() }
                         Divider()
-                        LinkRow(Icon.LEVELS, "Unlock all 5000 levels", Candy.plum) { store.debugUnlockAll(); app.sound.unlock() }
-                        Divider()
-                        LinkRow(Icon.COIN, "+1000 coins", Candy.plum) { store.addCoins(1000); app.sound.coin() }
+                        LinkRow(Icon.COIN, "+1000 coins", com.ngstudio.mazebrush.ui.theme.Clean.inkSoft) { store.addCoins(1000); app.sound.coin() }
                         Divider()
                         LinkRow(Icon.RESTART, "Reset all progress", Candy.pink) { confirmReset = true }
                     }

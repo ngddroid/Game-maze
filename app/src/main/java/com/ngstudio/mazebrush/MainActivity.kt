@@ -52,8 +52,8 @@ class MainActivity : ComponentActivity() {
         if (android.os.Build.VERSION.SDK_INT >= 29) window.isNavigationBarContrastEnforced = false
         // Debug QA: `--ez autoplay true` plays every level's stored solution (see scripts/device_qa.sh).
         if (BuildConfig.DEBUG && intent.getBooleanExtra("autoplay", false)) com.ngstudio.mazebrush.game.DebugFlags.autoplay = true
-        // Debug: `--ei debugBackdrop 3` shows chapter background 3 (1-based) everywhere, without changing progress.
-        if (BuildConfig.DEBUG && intent.hasExtra("debugBackdrop")) com.ngstudio.mazebrush.game.DebugFlags.backdrop = intent.getIntExtra("debugBackdrop", 0) - 1
+        if (BuildConfig.DEBUG && intent.hasExtra("debugSlowmo")) com.ngstudio.mazebrush.game.DebugFlags.timeScale = intent.getFloatExtra("debugSlowmo", 1f)
+        if (BuildConfig.DEBUG && intent.hasExtra("debugBoard")) com.ngstudio.mazebrush.game.DebugFlags.board = intent.getIntExtra("debugBoard", -1)
         if (savedInstanceState == null) logNotificationOpen(intent)
         setContent { MazeTheme { AppNav() } }
     }
