@@ -1,5 +1,10 @@
 package com.ngstudio.mazebrush.ui.screens
 
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -96,7 +101,7 @@ import kotlin.math.sin
  * it (coins, or a number of finished levels for paint colours). Layout idea from the genre; colours and art are ours.
  */
 private enum class ShopTab(val label: String, val icon: Icon) {
-    BALL("Ball", Icon.BALL), TRAIL("Trail", Icon.TRAIL), PAINT("Paint", Icon.DROP)   // no Maze tab: the board follows the level
+    BALL("Ball", Icon.BALL), PAINT("Paint", Icon.DROP)   // no Trail or Maze tab: the ball's paint-droplet trail and the maze colour are fixed
 }
 
 private enum class Kind { BALL, TRAIL, COLOR, FINISH, BOARD }
@@ -122,7 +127,6 @@ private val trailTints = listOf(
 
 private fun entries(tab: ShopTab, s: GameStore, board: BoardTheme): List<Entry> = when (tab) {
     ShopTab.BALL -> BallSkin.ALL.map { Entry(Kind.BALL, it.id, it.name, it.price, 0, it.id in s.ownedBalls, s.ballSkin == it.id, it.a.color()) }
-    ShopTab.TRAIL -> TrailStyle.ALL.map { Entry(Kind.TRAIL, it.id, it.name, it.price, 0, it.id in s.ownedTrails, s.trail == it.id, trailTints[it.id % trailTints.size]) }
     ShopTab.PAINT -> PaintColor.ALL.map { Entry(Kind.COLOR, it.id, it.name, 0, it.levels, s.ownsPaint(it.id), s.paintColor == it.id, it.rgb.color()) } +
         PaintFinish.ALL.map { Entry(Kind.FINISH, it.id, it.name, it.price, 0, it.id in s.ownedFinishes, s.finish == it.id, Color(0xFFFFC93C)) }
 }
@@ -173,14 +177,14 @@ fun SkinsTab() {
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
         // live preview of the chosen look
         Box(
-            Modifier.fillMaxWidth().weight(1f).padding(bottom = 10.dp)
+            Modifier.fillMaxWidth().weight(0.85f).padding(bottom = 10.dp)
                 .shadow(6.dp, RoundedCornerShape(24.dp), ambientColor = Clean.pillShadow, spotColor = Clean.pillShadow)
                 .clip(RoundedCornerShape(24.dp)).background(Clean.pill),
         ) {
             SkinPreview(Modifier.fillMaxSize(), pv.ball, pv.trail, pv.finish, pv.paint, pv.board)
             PreviewChip(pv, store, Modifier.align(Alignment.BottomCenter).padding(10.dp))
         }
-        ShopPanel(pv, Modifier.fillMaxWidth().padding(bottom = 8.dp))
+        ShopPanel(pv, Modifier.fillMaxWidth().weight(1.25f).padding(bottom = 8.dp), gridFill = true)
     }
 }
 
@@ -199,7 +203,7 @@ fun PreviewChip(pv: ShopPreview, store: GameStore, modifier: Modifier = Modifier
 
 /** The shop panel: Ball / Trail / Paint / Maze tabs, the paged grid, page dots and the buy / ad button. */
 @Composable
-fun ShopPanel(pv: ShopPreview, modifier: Modifier = Modifier) {
+fun ShopPanel(pv: ShopPreview, modifier: Modifier = Modifier, gridFill: Boolean = true) {
     val app = MazeApp.instance
     val store = app.store
     var noMoney by remember { mutableStateOf(false) }
@@ -260,29 +264,20 @@ fun ShopPanel(pv: ShopPreview, modifier: Modifier = Modifier) {
                 }
             }
         }
-        val pages = (list.size + PER_PAGE - 1) / PER_PAGE
-        key(tab) {
-            val ps = rememberPagerState { pages }
-            HorizontalPager(ps, Modifier.fillMaxWidth().padding(top = 14.dp)) { page ->
-                Column(Modifier.padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (r in 0 until 2) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        for (c in 0 until 3) {
-                            val e = list.getOrNull(page * PER_PAGE + r * 3 + c)
-                            if (e == null) Spacer(Modifier.weight(1f))
-                            else ShopCard(e, store.levelsDone, pv.tapped == (e.kind.ordinal to e.id), Modifier.weight(1f)) {
-                                preview(e)
-                                pv.tapped = e.kind.ordinal to e.id
-                                if (e.owned && !e.equipped) { equip(e); app.sound.pop() }
-                            }
-                        }
-                    }
+        // a vertical scroller: a 3-column grid of cards that scrolls up/down (no sideways paging)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = (if (gridFill) Modifier.weight(1f) else Modifier.heightIn(max = 250.dp)).fillMaxWidth().padding(top = 12.dp),
+            contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(list, key = { it.kind.ordinal * 1000 + it.id }) { e ->
+                ShopCard(e, store.levelsDone, pv.tapped == (e.kind.ordinal to e.id), Modifier) {
+                    preview(e)
+                    pv.tapped = e.kind.ordinal to e.id
+                    if (e.owned && !e.equipped) { equip(e); app.sound.pop() }
                 }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
-                if (pages > 1) for (k in 0 until pages) Box(
-                    Modifier.padding(horizontal = 4.dp).size(if (k == ps.currentPage) 9.dp else 7.dp)
-                        .background(if (k == ps.currentPage) Clean.teal else Clean.track, CircleShape),
-                )
             }
         }
         // what to do about the tapped locked item

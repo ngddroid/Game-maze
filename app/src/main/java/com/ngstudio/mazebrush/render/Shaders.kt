@@ -221,6 +221,10 @@ void main() {
     float t = clamp(-f0 / HF, 0.0, 1.0);
     vec3 faceC = mix(uFloor * 0.62, mix(uFloor, uSideBottom, 0.25) * 0.78, smoothstep(0.75, 1.0, 1.0 - t));
     fc = mix(fc, faceC, face);
+    // a faint cell grid on the channel floor (reference "graph-paper" look), aligned to the maze cells
+    vec2 gf = abs(fract(p) - 0.5);
+    float gline = smoothstep(0.455, 0.5, max(gf.x, gf.y));
+    fc = mix(fc, fc * 1.5 + 0.02, gline * 0.5);
     col = vec4(fc * fl, fl) + col * (1.0 - fl);
     o = col;
 }
@@ -382,6 +386,10 @@ void main() {
     // fresh paint has a soft wet sheen that dries within ~0.3 s (smooth: no grid, no speckles)
     col += vec3(0.10) * exp(-age * 7.0);
     col += vec3(spec);
+    // the same faint cell grid shows through the paint (reference look), aligned to the maze cells
+    vec2 gf = abs(fract(p) - 0.5);
+    float gline = smoothstep(0.455, 0.5, max(gf.x, gf.y));
+    col *= 1.0 - 0.12 * gline;
 
     if (uShine > -0.5) {
         // win: a bright ring of light ripples out from the ball, with a softer echo behind it,

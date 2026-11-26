@@ -1237,7 +1237,7 @@ private fun SkinSheet(store: GameStore, pv: ShopPreview, onHeight: (Int) -> Unit
                 HSpace(10.dp)
                 TealButton(Icon.CLOSE, "Close", size = 40.dp) { onClose() }
             }
-            ShopPanel(pv, Modifier.fillMaxWidth())
+            ShopPanel(pv, Modifier.fillMaxWidth(), gridFill = false)
         }
     }
 }

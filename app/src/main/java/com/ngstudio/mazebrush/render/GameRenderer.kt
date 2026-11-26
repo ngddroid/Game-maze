@@ -24,7 +24,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** How far the comet streak trails behind the ball, in seconds of travel; it shrinks into the ball after a stop. */
-private const val STREAK_LAG = 0.11f
+private const val STREAK_LAG = 0.16f
 /** The paint floods in this long after the ball has passed a cell; a cell fills at the ball's speed, at most [FLOOD_DUR]. */
 private const val FLOOD_DELAY = 0.03f
 private const val FLOOD_DUR = 0.09f
@@ -146,7 +146,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
     private var quadVao = 0
 
     private val ambient = Particles(90)
-    private val boardFx = Particles(900)
+    private val boardFx = Particles(1300)
     private val screenFx = Particles(500)
 
     private var w = 1f
@@ -833,55 +833,40 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
             trailK++
             val jx = (boardFx.random() - 0.5f) * cellPx * 0.4f
             val jy = (boardFx.random() - 0.5f) * cellPx * 0.4f
-            val r = boardFx.random(); val k = boardFx.random()
-            val nx = -kotlin.math.sin(trailDir); val ny = kotlin.math.cos(trailDir)
-            when (c.trail.id) {
-                8 -> if (r < 0.6f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.08f + 0.16f * k), pick(0x3FA9F5, 0x1E7BE0, 0x6CC8FF), 1f, 0.6f, 3, pgrow = -cellPx * 0.12f)
-                9 -> if (r < 0.4f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, -cellPx * 0.5f, cellPx * (0.22f + 0.16f * k), pick(0xFF4F8B, 0xFF7FAE, 0xFF2E6A), 1f, 0.9f, 6, pdrag = 1f, angle = (k - 0.5f) * 0.6f)
-                10 -> if (r < 0.55f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.18f + 0.2f * k), pick(0xFFD23F, 0xFFE88A, 0xFFC21A), 1f, 0.7f, 7, spin = 2f)
-                11 -> if (r < 0.6f) boardFx.spawn(p[0] + jx * 0.5f, p[1] + jy * 0.5f, 0f, -cellPx * 0.3f, cellPx * (0.35f + 0.2f * k), pick(0xF4F4F7, 0xDADCE3, 0xC9CCD6), 0.5f, 0.9f, 0, pgrow = cellPx * 0.6f)
-                12 -> {
-                    boardFx.spawn(p[0] + jx * 0.4f, p[1] + jy * 0.4f, 0f, -cellPx * 0.8f, cellPx * (0.42f + 0.18f * k), pick(0xFF5A1F, 0xFF8A1A, 0xFF3D12), 0.85f, 0.4f, 0, pgrow = -cellPx * 0.8f)
-                    if (r < 0.6f) boardFx.spawn(p[0] + jx * 0.3f, p[1] + jy * 0.3f, 0f, -cellPx * 0.5f, cellPx * 0.24f, Rgb(0xFFE36A), 1f, 0.28f, 0, pgrow = -cellPx * 0.5f)
-                }
-                13 -> {
-                    if (r < 0.5f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 1.5f, jy * 1.5f, cellPx * (0.2f + 0.16f * k), pick(0x8FDBFF, 0xC9F1FF, 0x4FB8F0), 1f, 0.65f, 13, pdrag = 2f, angle = trailDir + (k - 0.5f) * 0.8f)
-                    if (r > 0.86f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * 0.16f, Rgb(0xFFFFFF), 1f, 0.6f, 11, spin = 2f)
-                }
-                14 -> {
-                    if (r < 0.45f) boardFx.spawn(p[0] + jx * 0.5f, p[1] + jy * 0.5f, 0f, 0f, cellPx * (0.42f + 0.2f * k), pick(0xB46CFF, 0x8A4DFF, 0xD9A8FF), 1f, 0.22f, 14, angle = trailDir + (k - 0.5f) * 0.9f)
-                    if (r > 0.8f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * 0.16f, Rgb(0xFFFFFF), 1f, 0.25f, 2, spin = 4f)
-                }
-                15 -> if (r < 0.4f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 1.5f, jy * 1.5f, cellPx * (0.2f + 0.12f * k), pick(0x4CAF50, 0x7BC74D, 0x2E8B3E), 1f, 1.0f, 8, pgravity = cellPx * 0.6f, pdrag = 2f, spin = (k - 0.5f) * 6f)
-                16 -> if (r < 0.35f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.22f + 0.14f * k), pick(0xFF6FB5, 0xFF9AD0, 0xE84FA0, 0xFFB3D9), 1f, 0.9f, 9, spin = (k - 0.5f) * 3f)
-                17 -> if (r < 0.25f) boardFx.spawn(p[0] + jx, p[1] + jy, jx, -cellPx * 0.7f, cellPx * (0.26f + 0.12f * k), pick(0x9C5BFF, 0xB97BFF, 0x7A3FE0), 1f, 0.95f, 10, pdrag = 1f, angle = (k - 0.5f) * 0.5f)
-                18 -> if (r < 0.5f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2f, jy * 2f, cellPx * (0.32f + 0.2f * k), pick(0x3C8CFF, 0x6FB2FF, 0x2A6BE0, 0x9AD0FF), 1f, 0.75f, 13, pdrag = 3f, angle = trailDir + (k - 0.5f) * 1.2f)
-                19 -> if (trailK % 4 == 0) boardFx.spawn(p[0], p[1], 0f, 0f, cellPx * 0.55f, if ((trailK / 4) % 2 == 0) Rgb(0x00E5FF) else Rgb(0xFF4FD8), 1f, 0.45f, 4, pgrow = cellPx * 0.5f)
-                20 -> {
-                    if (r < 0.6f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.35f + 0.2f * k), pick(0x7A3BD6, 0xA24FE0, 0x4A2CB0, 0xE05AB8), 0.55f, 0.6f, 0, pgrow = -cellPx * 0.3f)
-                    if (r > 0.7f) boardFx.spawn(p[0] + jx * 1.4f, p[1] + jy * 1.4f, 0f, 0f, cellPx * (0.12f + 0.1f * k), Rgb(0xFFFFFF), 1f, 0.7f, 2, spin = 3f)
-                }
-                21 -> if (r < 0.45f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 0.5f, cellPx * 0.25f, cellPx * (0.16f + 0.16f * k), pick(0xFFFFFF, 0xDDF2FF), 1f, 1.0f, 11, spin = (k - 0.5f) * 2f)
-                22 -> if (r < 0.45f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2f, jy * 2f, cellPx * (0.2f + 0.12f * k), pick(0xFF6FA8, 0xFF9AC2, 0xF2588F), 1f, 1.0f, 12, pdrag = 2f, spin = (k - 0.5f) * 6f)
-                23 -> {
-                    val wave = kotlin.math.sin(now * 12f) * cellPx * 0.22f
-                    val hue = 0.5f + 0.22f * kotlin.math.sin(now * 2.2f)
-                    boardFx.spawn(p[0] + nx * wave, p[1] + ny * wave, 0f, 0f, cellPx * 0.5f, hsv(((hue % 1f) + 1f) % 1f, 0.6f, 1f), 0.5f, 0.6f, 0, pgrow = -cellPx * 0.3f)
-                }
-                // a little stronger than the originals (2026-11-25): ~35% bigger, more of them, they last longer
-                1 -> if (boardFx.random() < 0.7f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.19f + 0.16f * boardFx.random()), Rgb(0xFFFFFF), 1f, 0.5f, 2, spin = 3f)
-                2 -> if (boardFx.random() < 0.65f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, -cellPx * 0.6f, cellPx * (0.16f + 0.18f * boardFx.random()), Rgb(0xFFFFFF), 0.85f, 0.85f, 5)
-                3 -> boardFx.spawn(p[0], p[1], 0f, 0f, cellPx * 0.72f, c.skin.b, 0.65f, 0.36f, 0, pgrow = -cellPx * 1.6f)
-                4 -> if (boardFx.random() < 0.65f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 2.4f, jy * 2.4f, cellPx * 0.22f, c.theme.paints[(boardFx.random() * 5).toInt().coerceAtMost(4)], 1f, 0.75f, 1, spin = 6f)
-                5 -> {
-                    val hue = (now * 0.8f) % 1f
-                    boardFx.spawn(p[0] + jx * 0.3f, p[1] + jy * 0.3f, 0f, 0f, cellPx * 0.48f, hsv(hue, 0.65f, 1f), 0.75f, 0.45f, 0, pgrow = -cellPx * 0.9f)
-                }
-                6 -> if (boardFx.random() < 0.55f) boardFx.spawn(p[0] + jx, p[1] + jy, jx * 3.4f, jy * 3.4f, cellPx * (0.11f + 0.11f * boardFx.random()), c.paint, 1f, 0.65f, 3, pdrag = 3f)
-                7 -> if (boardFx.random() < 0.85f) boardFx.spawn(p[0] + jx, p[1] + jy, 0f, 0f, cellPx * (0.11f + 0.13f * boardFx.random()), Rgb(0xFFE38A), 1f, 0.75f, 2, spin = 4f)
-                else -> Unit
+            // reference-style trail (Color Maze): a light spray of small paint droplets that trails BEHIND the ball
+            // along the path it just painted, scattered near the path centre and settling quickly. The droplets are a
+            // darker shade of the paint so they stay visible on the painted path.
+            // a dense cloud of paint-coloured bubbles trailing behind the ball (reference "foam / smoke" look): the
+            // bubbles are the path colour and read as 3D blobs (shape 3's highlight/shadow), with a few slightly
+            // deeper ones for depth; they fan out behind the ball, settle (drag) and sink a touch, and linger a moment.
+            val deep = scaleRgb(c.paint, 0.82f)
+            val bx = -kotlin.math.cos(trailDir); val by = -kotlin.math.sin(trailDir)   // backward along travel
+            val nx = -kotlin.math.sin(trailDir); val ny = kotlin.math.cos(trailDir)    // across the path
+            for (d in 0 until 7) {
+                val back = cellPx * (1.1f * boardFx.random() * boardFx.random())       // most hug the ball, a tail trails further
+                val side = cellPx * (boardFx.random() - 0.5f) * (0.55f + 0.8f * back / cellPx)  // the cloud fans out behind
+                val sx = p[0] + bx * back + nx * side
+                val sy = p[1] + by * back + ny * side
+                val big = boardFx.random() < 0.35f
+                boardFx.spawn(
+                    sx, sy,
+                    (boardFx.random() - 0.5f) * cellPx * 0.4f, (boardFx.random() - 0.5f) * cellPx * 0.4f,
+                    cellPx * (if (big) 0.11f + 0.11f * boardFx.random() else 0.05f + 0.07f * boardFx.random()),
+                    if (boardFx.random() < 0.3f) deep else c.paint, 1f, 0.45f + 0.4f * boardFx.random(), 3,
+                    pdrag = 3.2f, pgravity = cellPx * 0.15f,
+                )
             }
         }
+    }
+
+    private fun scaleRgb(c: Rgb, k: Float): Rgb {
+        fun u(v: Float) = (v.coerceIn(0f, 1f) * 255f).toInt()
+        return Rgb((u(c.r * k) shl 16) or (u(c.g * k) shl 8) or u(c.b * k))
+    }
+
+    private fun mixRgb(c: Rgb, toward: Float, t: Float): Rgb {
+        fun u(v: Float) = (v.coerceIn(0f, 1f) * 255f).toInt()
+        return Rgb((u(c.r + (toward - c.r) * t) shl 16) or (u(c.g + (toward - c.g) * t) shl 8) or u(c.b + (toward - c.b) * t))
     }
 
     private fun hsv(hh: Float, s: Float, v: Float): Rgb {
@@ -990,7 +975,9 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
             if (introT > 1.2f) introT = -1f
         }
         updateMove(dt)
-        if (moving && !undoMode && ballScale > 0.9f) pushTrail()
+        // keep recording the ball's position even at rest, so after a stop the streak's tail catches up to the
+        // ball and the plume collapses into it instead of leaving a frozen segment behind a stationary ball
+        if (!undoMode && ballScale > 0.9f && winT < 0f) pushTrail()
         val stretchTarget = if (moving && !undoMode) (speed / 40f).coerceIn(0f, 1f) * 0.07f else 0f
         stretch += (stretchTarget - stretch) * min(1f, dt * 22f)
         updateFills()
@@ -1064,8 +1051,8 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
         for (i in 1 until cx.size) total += abs(cx[i] - cx[i - 1]) + abs(cy[i] - cy[i - 1])
         if (total < 0.08f) return
         GLES30.glUseProgram(pStreak.id)
-        col3(pStreak, "uColor", c.skin.a)
-        val rMax = ballPx * 0.42f
+        col3(pStreak, "uColor", mixRgb(c.paint, 1f, 0.40f))   // a soft, light-tinted spray plume behind the ball (reference look)
+        val rMax = ballPx * 0.58f   // a bold, soft spray plume behind the ball (reference)
         var run = 0f
         for (i in 1 until cx.size) {
             val seg = abs(cx[i] - cx[i - 1]) + abs(cy[i] - cy[i - 1])
@@ -1078,7 +1065,7 @@ class GameRenderer(private val listener: RenderListener) : GLSurfaceView.Rendere
             quadUniforms(pStreak, min(ax, bx) - pad, min(ay, by) - pad, abs(bx - ax) + pad * 2, abs(by - ay) + pad * 2)
             GLES30.glUniform2f(pStreak.u("uA"), ax, ay); GLES30.glUniform2f(pStreak.u("uB"), bx, by)
             GLES30.glUniform1f(pStreak.u("uRA"), ra); GLES30.glUniform1f(pStreak.u("uRB"), rb)
-            GLES30.glUniform1f(pStreak.u("uAA"), alpha * 0.85f * s0 * s0); GLES30.glUniform1f(pStreak.u("uAB"), alpha * 0.85f * s1 * s1)
+            GLES30.glUniform1f(pStreak.u("uAA"), alpha * 0.95f * s0 * s0); GLES30.glUniform1f(pStreak.u("uAB"), alpha * 0.95f * s1 * s1)
             drawQuad()
         }
     }
