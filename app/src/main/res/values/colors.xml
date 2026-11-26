@@ -4,4 +4,6 @@
     <color name="splash_bg">#FFF6EC</color>
     <!-- Notification accent (status-bar icon tint): the warm orange of the game's paint. -->
     <color name="notify_accent">#FFE8892B</color>
+    <!-- Adaptive-icon bleed background: the app_logo border lavender. -->
+    <color name="ic_launcher_bg">#E9D7FC</color>
 </resources>
